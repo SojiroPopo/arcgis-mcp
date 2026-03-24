@@ -442,7 +442,29 @@ async def test_map_layout(tools):
             else (_ for _ in ()).throw(AssertionError(r[:300])),
     )
 
-    # ── create_map_layout – formal A3 landscape ────────────────────────
+    # ── create_map_layout – informal A3 landscape ──────────────────────
+    layout_informal = "TestInformalLayout_MCP"
+    await test_tool(
+        tools,
+        "arcgis_create_map_layout",
+        {
+            "project_path": TEST_APRX,
+            "map_name": TEST_MAP_NAME,
+            "layout_name": layout_informal,
+            "paper_size": "A3",
+            "orientation": "landscape",
+            "layout_type": "informal",
+            "title": "PETA UJI INFORMAL",
+            "subtitle": "Area Test",
+            "company_name": "PT. Test MCP",
+            "scale": 75000.0,
+        },
+        check_fn=lambda r: None
+            if ('"success": true' in r and "Map Frame" in r)
+            else (_ for _ in ()).throw(AssertionError(r[:300])),
+    )
+
+    # ── create_map_layout – formal A4 landscape with extras ────────────
     layout_formal = "TestFormalLayout_MCP"
     await test_tool(
         tools,
@@ -451,10 +473,26 @@ async def test_map_layout(tools):
             "project_path": TEST_APRX,
             "map_name": TEST_MAP_NAME,
             "layout_name": layout_formal,
-            "paper_size": "A3",
+            "paper_size": "A4",
             "orientation": "landscape",
             "layout_type": "formal",
-            "title": "Test Formal Layout",
+            "title": "PETA UJI FORMAL",
+            "subtitle": "TAHUN 2024",
+            "company_name": "PT. Sukses Karya Mandiri",
+            "company_info": {
+                "kecamatan": "Kutai Barat",
+                "kabupaten": "Kutai Kartanegara",
+                "provinsi": "Kalimantan Timur",
+            },
+            "show_statistics_table": True,
+            "statistics_data": [
+                {"label": "Jalan Produksi", "value": "45.23", "unit": "km"},
+                {"label": "Jalan Koleksi",  "value": "23.45", "unit": "km"},
+            ],
+            "show_inset_map": True,
+            "map_ref": "SKM-2024-001",
+            "show_approval_block": True,
+            "scale": 50000.0,
         },
         check_fn=lambda r: None
             if ('"success": true' in r and "Map Frame" in r)
