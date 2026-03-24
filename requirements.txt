@@ -1,0 +1,16 @@
+# ArcGIS MCP Server — Python dependencies
+#
+# NOTE: arcpy is NOT listed here — it is provided by the ArcGIS Pro installation.
+# Install these packages INTO the arcgispro-py3 conda environment:
+#
+#   conda activate arcgispro-py3
+#   pip install mcp pydantic
+#
+# Or using the conda Python directly:
+#   "C:/Program Files/ArcGIS/Pro/bin/Python/envs/arcgispro-py3/python.exe" -m pip install mcp pydantic
+
+# MCP Python SDK (FastMCP)
+mcp>=1.0.0
+
+# Data validation (usually already in arcgispro-py3, but ensure version)
+pydantic>=2.0.0
