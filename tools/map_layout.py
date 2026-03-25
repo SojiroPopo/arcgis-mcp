@@ -29,8 +29,15 @@ FORMAL  (e.g. A4 landscape — official submission maps):
   ║ FOOTER: MAP REF · date created               ║
   ╚══════════════════════════════════════════════╝
 
-Requires ArcGIS Pro 2.7+ (createLayout + CreateMapSurroundElement).
-ArcGIS Pro 3.x recommended for CreateTextElement support.
+Requires ArcGIS Pro 3.x (tested on 3.4).
+
+ArcGIS Pro 3.x API notes (differs from 2.x):
+  - project.createTextElement(lyt, arcpy.Point, "POINT", text, text_size, ...)
+  - lyt.createMapSurroundElement(extent, surround_type_str, mf, si, name)
+    surround_type_str: "NORTH_ARROW" | "SCALE_BAR" | "LEGEND"
+  - project.createPredefinedGraphicElement(lyt, extent, "RECTANGLE", name=name)
+  - project.deleteItem(layout)
+  - listStyleItems style_class: "NORTH_ARROW", "SCALE_BAR", "LEGEND" (uppercase)
 """
 
 from typing import Dict, List, Optional
@@ -375,24 +382,29 @@ def register(mcp: FastMCP) -> None:
 
                 def _text(name, x0, y0, x1, y1, txt, size=8.0, bold=False, italic=False):
                     try:
-                        arcpy.mp.CreateTextElement(
-                            lyt, arcpy.Extent(x0, y0, x1, y1),
-                            None, txt,
-                            font_size=size, bold=bold, italic=italic,
-                            element_name=name,
+                        _fs = ("Bold Italic" if bold and italic
+                               else "Bold" if bold
+                               else "Italic" if italic
+                               else "Regular")
+                        project.createTextElement(
+                            lyt,
+                            arcpy.Point((x0 + x1) / 2, (y0 + y1) / 2),
+                            "POINT", txt,
+                            text_size=size, font_family_name="Arial",
+                            font_style_name=_fs, name=name,
                         )
                         elements_added.append(name)
                         return True
                     except Exception:
                         return False
 
-                def _surround(name, x0, y0, x1, y1, si, frame=None):
+                def _surround(name, x0, y0, x1, y1, si, surround_type, frame=None):
                     if si is None:
                         return False
                     try:
-                        arcpy.mp.CreateMapSurroundElement(
-                            lyt, arcpy.Extent(x0, y0, x1, y1),
-                            frame or mf, si, name,
+                        lyt.createMapSurroundElement(
+                            arcpy.Extent(x0, y0, x1, y1),
+                            surround_type, frame or mf, si, name,
                         )
                         elements_added.append(name)
                         return True
@@ -498,15 +510,15 @@ def register(mcp: FastMCP) -> None:
 
                 # North arrow
                 if show_north_arrow:
-                    na_si   = _si(["North Arrow", "North Arrows"], "ArcGIS North 1") \
-                              or _si(["North Arrow", "North Arrows"])
+                    na_si   = _si(["NORTH_ARROW"], "ArcGIS North 1") \
+                              or _si(["NORTH_ARROW"])
                     na_size = min(na_h * 0.78, (px1 - px0) * 0.50)
                     na_cx   = (px0 + px1) / 2
                     na_cy   = cur_bot - na_h / 2
                     _surround("North Arrow",
                               na_cx - na_size / 2, na_cy - na_size / 2,
                               na_cx + na_size / 2, na_cy + na_size / 2,
-                              na_si)
+                              na_si, "NORTH_ARROW")
                 cur_bot -= (na_h + gap)
 
                 # Scale + projection info
@@ -521,26 +533,26 @@ def register(mcp: FastMCP) -> None:
                 # Legend
                 if show_legend:
                     _surround("Legend", px0, py0, px1, cur_bot,
-                              _si(["Legend", "Legends"]))
+                              _si(["LEGEND"]), "LEGEND")
 
                 # Scale bar bottom-left of map
-                sb_si = (_si(["Scale bar", "Scale Bar"], "Alternating Scale Bar 1")
-                         or _si(["Scale bar", "Scale Bar"]))
+                sb_si = (_si(["SCALE_BAR"], "Alternating Scale Bar 1")
+                         or _si(["SCALE_BAR"]))
                 if sb_si:
                     sb_pad = 0.10
                     sb_w   = min(2.5, mf_w * 0.26)
                     _surround("Scale Bar",
                               mf_x0 + sb_pad, mf_y0 + sb_pad,
                               mf_x0 + sb_pad + sb_w, mf_y0 + sb_pad + 0.28,
-                              sb_si)
+                              sb_si, "SCALE_BAR")
 
                 # Single neat line
                 try:
-                    arcpy.mp.CreateGraphicElement(
+                    project.createPredefinedGraphicElement(
                         lyt,
                         arcpy.Extent(margin * 0.5, margin * 0.5,
                                      pw - margin * 0.5, ph - margin * 0.5),
-                        element_name="Neat Line",
+                        "RECTANGLE", name="Neat Line",
                     )
                     elements_added.append("Neat Line")
                 except Exception:
@@ -611,15 +623,15 @@ def register(mcp: FastMCP) -> None:
                 mf = _map_frame("Main Map Frame", la_x0, mf_y0, la_x1, mf_y1, m, scale)
 
                 # ── Scale bar strip ─────────────────────────────────────
-                sb_si = (_si(["Scale bar", "Scale Bar"], "Alternating Scale Bar 1")
-                         or _si(["Scale bar", "Scale Bar"]))
+                sb_si = (_si(["SCALE_BAR"], "Alternating Scale Bar 1")
+                         or _si(["SCALE_BAR"]))
                 if sb_si:
                     sb_pad = 0.10
                     sb_w   = min(2.8, left_w * 0.40)
                     _surround("Scale Bar",
                               la_x0 + sb_pad, sb_y0 + 0.08,
                               la_x0 + sb_pad + sb_w, sb_y0 + 0.08 + 0.28,
-                              sb_si)
+                              sb_si, "SCALE_BAR")
 
                 # ── Statistics table (optional) ─────────────────────────
                 if show_stats:
@@ -719,19 +731,19 @@ def register(mcp: FastMCP) -> None:
                 if show_legend:
                     # Optional north arrow above legend if space allows
                     if show_north_arrow and leg_h > 1.5:
-                        na_si   = (_si(["North Arrow", "North Arrows"], "ArcGIS North 1")
-                                   or _si(["North Arrow", "North Arrows"]))
+                        na_si   = (_si(["NORTH_ARROW"], "ArcGIS North 1")
+                                   or _si(["NORTH_ARROW"]))
                         na_size = min(0.70, (px1 - px0) * 0.30)
                         na_cx   = (px0 + px1) / 2
                         na_y1_  = leg_y1
                         _surround("North Arrow",
                                   na_cx - na_size / 2, na_y1_ - na_size,
                                   na_cx + na_size / 2, na_y1_,
-                                  na_si)
+                                  na_si, "NORTH_ARROW")
                         leg_y1 -= (na_size + 0.04)
 
                     _surround("Legend", px0, leg_y0, px1, leg_y1,
-                              _si(["Legend", "Legends"]))
+                              _si(["LEGEND"]), "LEGEND")
 
                 # ── Inset / locator map ─────────────────────────────────
                 if show_inset and ins_y1 > ins_y0 + 0.3:
@@ -773,10 +785,10 @@ def register(mcp: FastMCP) -> None:
                 # ── Double neat line ────────────────────────────────────
                 for name, off in [("Neat Line Outer", 0.05), ("Neat Line Inner", 0.13)]:
                     try:
-                        arcpy.mp.CreateGraphicElement(
+                        project.createPredefinedGraphicElement(
                             lyt,
                             arcpy.Extent(off, off, pw - off, ph - off),
-                            element_name=name,
+                            "RECTANGLE", name=name,
                         )
                         elements_added.append(name)
                     except Exception:
