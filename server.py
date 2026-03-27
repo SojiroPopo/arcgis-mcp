@@ -15,6 +15,7 @@ Tool categories:
                     flow accumulation, watershed, slope classification
   - Raster        : zonal statistics, reclassify, extract by mask,
                     raster calculator, raster/polygon conversions, resample
+  - Map Layout    : create layout, export layout, list layouts, update elements
 
 Requirements:
   - ArcGIS Pro 3.x with valid license
@@ -46,7 +47,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mcp.server.fastmcp import FastMCP
 
 # Import tool registration functions
-from tools import data_io, geoprocessing, terrain, raster_analysis
+from tools import data_io, geoprocessing, terrain, raster_analysis, map_layout
 
 # ---------------------------------------------------------------------------
 # Server initialisation
@@ -71,6 +72,7 @@ data_io.register(mcp)
 geoprocessing.register(mcp)
 terrain.register(mcp)
 raster_analysis.register(mcp)
+map_layout.register(mcp)
 
 # ---------------------------------------------------------------------------
 # Entry point
