@@ -373,12 +373,24 @@ def register(mcp: FastMCP) -> None:
                     """First StyleItem matching any category from ArcGIS 2D style."""
                     for cat in cats:
                         try:
-                            items = project.listStyleItems("ArcGIS 2D", cat, query)
+                            # Empty query string returns 0 items in Pro 3.x — omit it
+                            items = (project.listStyleItems("ArcGIS 2D", cat, query)
+                                     if query
+                                     else project.listStyleItems("ArcGIS 2D", cat))
                             if items:
                                 return items[0]
                         except Exception:
                             pass
                     return None
+
+                def _rect_poly(x0, y0, x1, y1):
+                    """arcpy.Polygon from corner coords (for createPredefinedGraphicElement)."""
+                    arr = arcpy.Array([
+                        arcpy.Point(x0, y0), arcpy.Point(x0, y1),
+                        arcpy.Point(x1, y1), arcpy.Point(x1, y0),
+                        arcpy.Point(x0, y0),
+                    ])
+                    return arcpy.Polygon(arr)
 
                 def _text(name, x0, y0, x1, y1, txt, size=8.0, bold=False, italic=False):
                     try:
@@ -386,13 +398,17 @@ def register(mcp: FastMCP) -> None:
                                else "Bold" if bold
                                else "Italic" if italic
                                else "Regular")
-                        project.createTextElement(
+                        te = project.createTextElement(
                             lyt,
-                            arcpy.Point((x0 + x1) / 2, (y0 + y1) / 2),
+                            arcpy.Point((x0 + x1) / 2, y1),
                             "POINT", txt,
                             text_size=size, font_family_name="Arial",
                             font_style_name=_fs, name=name,
                         )
+                        try:
+                            te.anchor = "TOP_MID"
+                        except Exception:
+                            pass
                         elements_added.append(name)
                         return True
                     except Exception:
@@ -430,6 +446,7 @@ def register(mcp: FastMCP) -> None:
                         elements_added, _si, _text, _surround, _map_frame,
                         title_str, subtitle_str, company_str,
                         scale, show_north_arrow, show_legend,
+                        project,
                     )
                 else:
                     mf = _build_formal(
@@ -464,13 +481,14 @@ def register(mcp: FastMCP) -> None:
                 elements_added, _si, _text, _surround, _map_frame,
                 title_str, subtitle_str, company_str,
                 scale, show_north_arrow, show_legend,
+                project,
             ):
-                margin     = 0.12
-                panel_sep  = 0.06
-                panel_frac = 0.255
+                margin     = 0.15
+                panel_sep  = 0.10
+                panel_frac = 0.22
 
                 usable_w = pw - 2 * margin
-                usable_h = ph - 2 * margin
+                ph_      = ph - 2 * margin
                 panel_w  = usable_w * panel_frac
                 mf_w     = usable_w - panel_w - panel_sep
 
@@ -478,80 +496,129 @@ def register(mcp: FastMCP) -> None:
                 mf_x1, mf_y1 = margin + mf_w, ph - margin
                 px0 = mf_x1 + panel_sep
                 px1 = pw - margin
-                py0, py1, ph_ = margin, ph - margin, ph - margin - margin
+                py0, py1 = margin, ph - margin
+
+                DIVIDER_H = 0.008
+                GAP       = 0.06
+
+                def _divider(y, idx=0):
+                    name = f"Divider_{idx}"
+                    try:
+                        project.createPredefinedGraphicElement(
+                            lyt,
+                            _rect_poly(px0, y - DIVIDER_H / 2, px1, y + DIVIDER_H / 2),
+                            "RECTANGLE", name=name,
+                        )
+                        elements_added.append(name)
+                    except Exception:
+                        pass
 
                 mf = _map_frame("Main Map Frame", mf_x0, mf_y0, mf_x1, mf_y1, m, scale)
 
-                # ── Panel section heights (bottom → top) ────────────────
-                gap = 0.05
-                legend_h     = ph_ * 0.36
-                scale_info_h = ph_ * 0.10
-                na_h         = ph_ * 0.12
-                title_h      = ph_ - legend_h - scale_info_h - na_h - gap * 4
+                # Section heights (proportion of panel height)
+                legend_h     = ph_ * 0.46
+                scale_info_h = ph_ * 0.13
+                na_h         = ph_ * 0.17
+                divider_total = DIVIDER_H * 3 + GAP * 6
+                title_h      = ph_ - legend_h - scale_info_h - na_h - divider_total
 
-                cur_bot = py1  # walk down from top
+                cur = py1   # walk downward
 
-                # Title block (top of panel)
-                _text("Title",   px0, cur_bot - title_h, px1, cur_bot,
-                      title_str, size=12.0, bold=True)
-                cur_y = cur_bot - title_h
+                # ── Title block ──────────────────────────────────────────
+                # Split "PETA" from main title for visual weight
+                words = title_str.strip().split()
+                if words and words[0].upper() == "PETA" and len(words) > 1:
+                    peta_label = "PETA"
+                    main_title = " ".join(words[1:])
+                else:
+                    peta_label = None
+                    main_title = title_str
 
-                if subtitle_str:
-                    sub_h = min(0.38, title_h * 0.30)
-                    _text("Subtitle", px0, cur_y - sub_h, px1, cur_y, subtitle_str, size=8.5)
-                    cur_y -= sub_h
+                lbl_h   = min(0.28, title_h * 0.20)
+                comp_h  = min(0.32, title_h * 0.22)
+                main_h  = title_h - lbl_h - comp_h
+
+                if peta_label:
+                    _text("Title Label", px0, cur - lbl_h, px1, cur,
+                          peta_label, size=8.5)
+                    cur -= lbl_h
+                    _text("Title Main", px0, cur - main_h, px1, cur,
+                          main_title, size=13.5, bold=True)
+                    cur -= main_h
+                else:
+                    _text("Title", px0, cur - (lbl_h + main_h), px1, cur,
+                          main_title, size=13.5, bold=True)
+                    cur -= (lbl_h + main_h)
 
                 if company_str:
-                    comp_h = min(0.38, max(0.18, cur_y - py0 - legend_h - scale_info_h - na_h - gap * 3))
-                    _text("Company Name", px0, cur_y - comp_h, px1, cur_y,
-                          company_str, size=8.5, bold=True)
+                    _text("Company Name", px0, cur - comp_h, px1, cur,
+                          company_str, size=9.0, bold=True)
+                if subtitle_str:
+                    _text("Subtitle", px0, cur - comp_h, px1, cur,
+                          subtitle_str, size=8.0, italic=True)
+                cur -= comp_h
 
-                cur_bot -= (title_h + gap)
+                # ── Divider 1 ─────────────────────────────────────────
+                cur -= GAP
+                _divider(cur, 1)
+                cur -= GAP
 
-                # North arrow
+                # ── North Arrow ──────────────────────────────────────────
                 if show_north_arrow:
-                    na_si   = _si(["NORTH_ARROW"], "ArcGIS North 1") \
-                              or _si(["NORTH_ARROW"])
-                    na_size = min(na_h * 0.78, (px1 - px0) * 0.50)
+                    na_si   = _si(["NORTH_ARROW"], "ArcGIS North 1") or _si(["NORTH_ARROW"])
+                    na_size = min(na_h * 0.82, (px1 - px0) * 0.65)
                     na_cx   = (px0 + px1) / 2
-                    na_cy   = cur_bot - na_h / 2
+                    na_mid  = cur - na_h / 2
                     _surround("North Arrow",
-                              na_cx - na_size / 2, na_cy - na_size / 2,
-                              na_cx + na_size / 2, na_cy + na_size / 2,
+                              na_cx - na_size / 2, na_mid - na_size / 2,
+                              na_cx + na_size / 2, na_mid + na_size / 2,
                               na_si, "NORTH_ARROW")
-                cur_bot -= (na_h + gap)
+                cur -= na_h
 
-                # Scale + projection info
+                # ── Divider 2 ─────────────────────────────────────────
+                cur -= GAP
+                _divider(cur, 2)
+                cur -= GAP
+
+                # ── Scale + Projection ───────────────────────────────────
                 denom = int(scale) if scale else None
-                proj  = (([f"Skala  1:{denom:,}"] if denom else []) +
-                         ["Proyeksi : TM", "Spheroid : WGS 1984", "Datum    : WGS 1984"])
+                proj_lines = (
+                    [f"1 : {denom:,}"] if denom else ["1 : -"]
+                ) + [
+                    "Proyeksi  : TM",
+                    "Spheroid  : WGS 1984",
+                    "Datum     : WGS 1984",
+                ]
                 _text("Scale and Projection Info",
-                      px0, cur_bot - scale_info_h, px1, cur_bot,
-                      "\n".join(proj), size=6.5)
-                cur_bot -= (scale_info_h + gap)
+                      px0, cur - scale_info_h, px1, cur,
+                      "\n".join(proj_lines), size=7.0)
+                cur -= scale_info_h
 
-                # Legend
+                # ── Divider 3 ─────────────────────────────────────────
+                cur -= GAP
+                _divider(cur, 3)
+                cur -= GAP
+
+                # ── Legend ──────────────────────────────────────────────
                 if show_legend:
-                    _surround("Legend", px0, py0, px1, cur_bot,
+                    _surround("Legend", px0, py0, px1, cur,
                               _si(["LEGEND"]), "LEGEND")
 
-                # Scale bar bottom-left of map
-                sb_si = (_si(["SCALE_BAR"], "Alternating Scale Bar 1")
-                         or _si(["SCALE_BAR"]))
+                # ── Scale Bar (bottom-left of map frame) ─────────────────
+                sb_si = _si(["SCALE_BAR"], "Alternating Scale Bar 1") or _si(["SCALE_BAR"])
                 if sb_si:
-                    sb_pad = 0.10
-                    sb_w   = min(2.5, mf_w * 0.26)
+                    sb_pad = 0.15
+                    sb_w   = min(2.8, mf_w * 0.30)
                     _surround("Scale Bar",
                               mf_x0 + sb_pad, mf_y0 + sb_pad,
-                              mf_x0 + sb_pad + sb_w, mf_y0 + sb_pad + 0.28,
+                              mf_x0 + sb_pad + sb_w, mf_y0 + sb_pad + 0.30,
                               sb_si, "SCALE_BAR")
 
-                # Single neat line
+                # ── Neat Line border ─────────────────────────────────────
                 try:
                     project.createPredefinedGraphicElement(
                         lyt,
-                        arcpy.Extent(margin * 0.5, margin * 0.5,
-                                     pw - margin * 0.5, ph - margin * 0.5),
+                        _rect_poly(0.06, 0.06, pw - 0.06, ph - 0.06),
                         "RECTANGLE", name="Neat Line",
                     )
                     elements_added.append("Neat Line")
@@ -787,7 +854,7 @@ def register(mcp: FastMCP) -> None:
                     try:
                         project.createPredefinedGraphicElement(
                             lyt,
-                            arcpy.Extent(off, off, pw - off, ph - off),
+                            _rect_poly(off, off, pw - off, ph - off),
                             "RECTANGLE", name=name,
                         )
                         elements_added.append(name)
