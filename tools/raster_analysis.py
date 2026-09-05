@@ -12,6 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from utils.helpers import format_error, run_arcpy, tool_result, validate_path
+from utils.safe_expr import UnsafeExpressionError, build_sa_namespace, safe_eval_expression
 
 
 def register(mcp: FastMCP) -> None:
@@ -408,13 +409,20 @@ def register(mcp: FastMCP) -> None:
 
             def _calc():
                 import arcpy
-                from arcpy.sa import Con, Raster  # noqa: F401 — needed for eval
+                from arcpy import sa
                 arcpy.CheckOutExtension("Spatial")
-                result = eval(expr)  # noqa: S307 — intentional map algebra eval
-                result.save(out)
-                arcpy.CheckInExtension("Spatial")
+                try:
+                    # Expression is LLM-supplied: AST-validated, evaluated with no
+                    # builtins and only whitelisted arcpy.sa functions in scope.
+                    result = safe_eval_expression(expr, build_sa_namespace(sa))
+                    result.save(out)
+                finally:
+                    arcpy.CheckInExtension("Spatial")
 
-            await run_arcpy(_calc)
+            try:
+                await run_arcpy(_calc)
+            except UnsafeExpressionError as e:
+                return tool_result(False, f"Expression rejected: {e}", {"expression": expr})
             return tool_result(True, f"Raster calculation saved: {out}", {
                 "expression": expr, "output": out,
             })
