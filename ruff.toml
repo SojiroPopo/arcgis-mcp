@@ -1,0 +1,27 @@
+# Konfigurasi ruff bersama untuk repo Python Popo (audit 2026-09-06).
+# Prinsip: tangkap bug & isu keamanan, jangan berisik soal gaya.
+target-version = "py311"
+line-length = 120
+extend-exclude = [".venv", "venv", "node_modules", "_trash", "_to_delete", "build", "dist", "test_output", "data", "outputs"]
+
+[lint]
+select = ["E", "F", "B", "S", "I", "UP", "PL"]
+ignore = [
+  "E501",     # panjang baris - diserahkan ke formatter
+  "PLR2004",  # magic number
+  "PLC0415",  # import di dalam fungsi (lazy import arcpy/snowflake memang sengaja)
+  "PLR0913",  # terlalu banyak argumen
+  "PLR0912", "PLR0915", "PLR0911",  # kompleksitas - warning saja belum layak gagal
+  "PLW0603",  # global statement
+  "S101",     # assert
+  "S608",     # f-string SQL: identifier dari config internal; review manual, bukan lint
+  "UP007", "UP035", "UP006",  # jangan paksa sintaks typing baru di kode lama
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["S", "PL", "B"]
+"test_*.py" = ["S", "PL", "B"]
+"scripts/**" = ["S603", "S607", "PLR"]
+
+[format]
+quote-style = "preserve"

@@ -6,7 +6,7 @@ polygon-to-raster conversion, and raster-to-polygon conversion.
 Requires the Spatial Analyst extension.
 """
 
-from typing import List, Optional
+from typing import List
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -24,6 +24,7 @@ def register(mcp: FastMCP) -> None:
 
     class ZonalStatsInput(BaseModel):
         """Input for arcgis_zonal_statistics."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         zone_features: str = Field(
             ...,
@@ -63,12 +64,15 @@ def register(mcp: FastMCP) -> None:
 
     class ZonalStatsAsTableInput(BaseModel):
         """Input for arcgis_zonal_statistics_as_table (more complete output)."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         zone_features: str = Field(..., description="Path to zone feature class or raster")
         zone_field: str = Field(..., description="Zone identifier field")
         value_raster: str = Field(..., description="Path to value raster")
         output_table: str = Field(..., description="Full output table path")
-        ignore_nodata: bool = Field(default=True, description="Ignore NoData cells in statistics calculation. Default: True")
+        ignore_nodata: bool = Field(
+            default=True, description="Ignore NoData cells in statistics calculation. Default: True"
+        )
         statistics_type: str = Field(
             default="ALL",
             description="Statistics: 'ALL', 'MEAN', 'SUM', 'MINIMUM', 'MAXIMUM', 'RANGE', 'STD'. Default: 'ALL'",
@@ -76,6 +80,7 @@ def register(mcp: FastMCP) -> None:
 
     class ReclassifyInput(BaseModel):
         """Input for arcgis_reclassify."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_raster: str = Field(..., description="Path to input raster to reclassify")
         output_path: str = Field(..., description="Full output raster path")
@@ -108,6 +113,7 @@ def register(mcp: FastMCP) -> None:
 
     class ExtractByMaskInput(BaseModel):
         """Input for arcgis_extract_by_mask."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_raster: str = Field(..., description="Path to input raster to extract from")
         mask_path: str = Field(
@@ -118,6 +124,7 @@ def register(mcp: FastMCP) -> None:
 
     class RasterCalculatorInput(BaseModel):
         """Input for arcgis_raster_calculator."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         expression: str = Field(
             ...,
@@ -135,6 +142,7 @@ def register(mcp: FastMCP) -> None:
 
     class RasterToPolygonInput(BaseModel):
         """Input for arcgis_raster_to_polygon."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_raster: str = Field(..., description="Path to classified raster to convert (integer raster)")
         output_path: str = Field(..., description="Full output polygon feature class path")
@@ -149,6 +157,7 @@ def register(mcp: FastMCP) -> None:
 
     class PolygonToRasterInput(BaseModel):
         """Input for arcgis_polygon_to_raster."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_features: str = Field(..., description="Path to input polygon feature class")
         value_field: str = Field(..., description="Field to use as raster cell values")
@@ -161,6 +170,7 @@ def register(mcp: FastMCP) -> None:
 
     class ResampleRasterInput(BaseModel):
         """Input for arcgis_resample_raster."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_raster: str = Field(..., description="Path to input raster")
         output_path: str = Field(..., description="Full output raster path")
@@ -218,6 +228,7 @@ def register(mcp: FastMCP) -> None:
 
             def _zonal():
                 import arcpy
+
                 arcpy.CheckOutExtension("Spatial")
                 nodata_opt = "DATA" if params.ignore_nodata else "NODATA"
                 arcpy.sa.ZonalStatisticsAsTable(
@@ -234,12 +245,19 @@ def register(mcp: FastMCP) -> None:
                 return count, fields
 
             count, fields = await run_arcpy(_zonal)
-            return tool_result(True, f"Zonal statistics table created: {out} ({count} zones)", {
-                "zones": zones, "zone_field": params.zone_field,
-                "value_raster": raster, "output": out,
-                "row_count": count, "output_fields": fields,
-                "statistics_type": params.statistics_type,
-            })
+            return tool_result(
+                True,
+                f"Zonal statistics table created: {out} ({count} zones)",
+                {
+                    "zones": zones,
+                    "zone_field": params.zone_field,
+                    "value_raster": raster,
+                    "output": out,
+                    "row_count": count,
+                    "output_fields": fields,
+                    "statistics_type": params.statistics_type,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -288,6 +306,7 @@ def register(mcp: FastMCP) -> None:
             def _reclass():
                 import arcpy
                 from arcpy.sa import Reclassify, RemapRange, RemapValue
+
                 arcpy.CheckOutExtension("Spatial")
 
                 if params.remap_type == "RANGE":
@@ -310,12 +329,17 @@ def register(mcp: FastMCP) -> None:
                 arcpy.CheckInExtension("Spatial")
 
             await run_arcpy(_reclass)
-            return tool_result(True, f"Reclassified raster saved: {out}", {
-                "input": in_raster, "output": out,
-                "reclass_field": params.reclass_field,
-                "remap_type": params.remap_type,
-                "remap_rules": params.remap_table,
-            })
+            return tool_result(
+                True,
+                f"Reclassified raster saved: {out}",
+                {
+                    "input": in_raster,
+                    "output": out,
+                    "reclass_field": params.reclass_field,
+                    "remap_type": params.remap_type,
+                    "remap_rules": params.remap_table,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -358,15 +382,22 @@ def register(mcp: FastMCP) -> None:
             def _extract():
                 import arcpy
                 from arcpy.sa import ExtractByMask
+
                 arcpy.CheckOutExtension("Spatial")
                 result = ExtractByMask(in_raster, mask)
                 result.save(out)
                 arcpy.CheckInExtension("Spatial")
 
             await run_arcpy(_extract)
-            return tool_result(True, f"Extracted raster saved: {out}", {
-                "input_raster": in_raster, "mask": mask, "output": out,
-            })
+            return tool_result(
+                True,
+                f"Extracted raster saved: {out}",
+                {
+                    "input_raster": in_raster,
+                    "mask": mask,
+                    "output": out,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -410,6 +441,7 @@ def register(mcp: FastMCP) -> None:
             def _calc():
                 import arcpy
                 from arcpy import sa
+
                 arcpy.CheckOutExtension("Spatial")
                 try:
                     # Expression is LLM-supplied: AST-validated, evaluated with no
@@ -423,9 +455,14 @@ def register(mcp: FastMCP) -> None:
                 await run_arcpy(_calc)
             except UnsafeExpressionError as e:
                 return tool_result(False, f"Expression rejected: {e}", {"expression": expr})
-            return tool_result(True, f"Raster calculation saved: {out}", {
-                "expression": expr, "output": out,
-            })
+            return tool_result(
+                True,
+                f"Raster calculation saved: {out}",
+                {
+                    "expression": expr,
+                    "output": out,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -466,15 +503,22 @@ def register(mcp: FastMCP) -> None:
 
             def _to_poly():
                 import arcpy
+
                 arcpy.conversion.RasterToPolygon(in_raster, out, simplify, params.raster_field)
                 count = int(arcpy.management.GetCount(out).getOutput(0))
                 return count
 
             count = await run_arcpy(_to_poly)
-            return tool_result(True, f"Raster converted to {count} polygons: {out}", {
-                "input_raster": in_raster, "output": out,
-                "simplify": params.simplify, "polygon_count": count,
-            })
+            return tool_result(
+                True,
+                f"Raster converted to {count} polygons: {out}",
+                {
+                    "input_raster": in_raster,
+                    "output": out,
+                    "simplify": params.simplify,
+                    "polygon_count": count,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -514,6 +558,7 @@ def register(mcp: FastMCP) -> None:
 
             def _to_raster():
                 import arcpy
+
                 arcpy.conversion.PolygonToRaster(
                     in_features=in_fc,
                     value_field=params.value_field,
@@ -524,11 +569,16 @@ def register(mcp: FastMCP) -> None:
                 )
 
             await run_arcpy(_to_raster)
-            return tool_result(True, f"Polygon rasterised: {out}", {
-                "input": in_fc, "output": out,
-                "value_field": params.value_field,
-                "cell_size": params.cell_size,
-            })
+            return tool_result(
+                True,
+                f"Polygon rasterised: {out}",
+                {
+                    "input": in_fc,
+                    "output": out,
+                    "value_field": params.value_field,
+                    "cell_size": params.cell_size,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -571,6 +621,7 @@ def register(mcp: FastMCP) -> None:
 
             def _resample():
                 import arcpy
+
                 arcpy.management.Resample(
                     in_raster=in_raster,
                     out_raster=out,
@@ -579,10 +630,15 @@ def register(mcp: FastMCP) -> None:
                 )
 
             await run_arcpy(_resample)
-            return tool_result(True, f"Resampled to {params.cell_size} units: {out}", {
-                "input": in_raster, "output": out,
-                "cell_size": params.cell_size,
-                "resampling_type": params.resampling_type,
-            })
+            return tool_result(
+                True,
+                f"Resampled to {params.cell_size} units: {out}",
+                {
+                    "input": in_raster,
+                    "output": out,
+                    "cell_size": params.cell_size,
+                    "resampling_type": params.resampling_type,
+                },
+            )
         except Exception as e:
             return format_error(e)

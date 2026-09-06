@@ -6,8 +6,6 @@ fill sinks, flow direction, flow accumulation, and watershed delineation.
 Requires the Spatial Analyst extension.
 """
 
-from typing import Optional
-
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -23,6 +21,7 @@ def register(mcp: FastMCP) -> None:
 
     class SlopeInput(BaseModel):
         """Input for arcgis_slope."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         dem_path: str = Field(..., description="Path to input DEM (Digital Elevation Model) raster")
         output_path: str = Field(..., description="Full output raster path (e.g. 'D:/output/slope.tif')")
@@ -47,12 +46,14 @@ def register(mcp: FastMCP) -> None:
 
     class AspectInput(BaseModel):
         """Input for arcgis_aspect."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         dem_path: str = Field(..., description="Path to input DEM raster")
         output_path: str = Field(..., description="Full output raster path")
 
     class HillshadeInput(BaseModel):
         """Input for arcgis_hillshade."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         dem_path: str = Field(..., description="Path to input DEM raster")
         output_path: str = Field(..., description="Full output raster path")
@@ -72,6 +73,7 @@ def register(mcp: FastMCP) -> None:
 
     class ContourInput(BaseModel):
         """Input for arcgis_contour."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         dem_path: str = Field(..., description="Path to input DEM raster")
         output_path: str = Field(..., description="Full output contour feature class path")
@@ -87,16 +89,18 @@ def register(mcp: FastMCP) -> None:
 
     class FillInput(BaseModel):
         """Input for arcgis_fill (hydrology - fill sinks)."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         dem_path: str = Field(..., description="Path to input DEM raster (should be hydrologically conditioned)")
         output_path: str = Field(..., description="Full output filled DEM raster path")
-        z_limit: Optional[float] = Field(
+        z_limit: float | None = Field(
             default=None,
             description="Maximum fill depth to remove. Leave None to fill all sinks. Use to avoid over-filling large basins.",
         )
 
     class FlowDirectionInput(BaseModel):
         """Input for arcgis_flow_direction."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         filled_dem_path: str = Field(..., description="Path to filled (sink-free) DEM raster. Run arcgis_fill first.")
         output_path: str = Field(..., description="Full output flow direction raster path")
@@ -107,8 +111,11 @@ def register(mcp: FastMCP) -> None:
 
     class FlowAccumulationInput(BaseModel):
         """Input for arcgis_flow_accumulation."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-        flow_direction_path: str = Field(..., description="Path to flow direction raster (output of arcgis_flow_direction)")
+        flow_direction_path: str = Field(
+            ..., description="Path to flow direction raster (output of arcgis_flow_direction)"
+        )
         output_path: str = Field(..., description="Full output flow accumulation raster path")
         data_type: str = Field(
             default="FLOAT",
@@ -117,17 +124,19 @@ def register(mcp: FastMCP) -> None:
 
     class WatershedInput(BaseModel):
         """Input for arcgis_watershed."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         flow_direction_path: str = Field(..., description="Path to flow direction raster")
         pour_points_path: str = Field(..., description="Path to pour points feature class or raster (outlet locations)")
         output_path: str = Field(..., description="Full output watershed raster path")
-        pour_point_field: Optional[str] = Field(
+        pour_point_field: str | None = Field(
             default=None,
             description="Field in pour_points to use as zone value. Leave None to use object ID.",
         )
 
     class SlopeclassInput(BaseModel):
         """Input for arcgis_slope_classification."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         dem_path: str = Field(..., description="Path to input DEM raster")
         output_path: str = Field(..., description="Full output classified slope raster path")
@@ -178,6 +187,7 @@ def register(mcp: FastMCP) -> None:
             def _slope():
                 import arcpy
                 from arcpy.sa import Slope
+
                 arcpy.CheckOutExtension("Spatial")
                 result = Slope(dem, params.output_measurement, params.z_factor)
                 result.save(out)
@@ -189,11 +199,16 @@ def register(mcp: FastMCP) -> None:
                 return {"min": round(min_v, 2), "max": round(max_v, 2), "mean": round(mean_v, 2)}
 
             stats = await run_arcpy(_slope)
-            return tool_result(True, f"Slope raster created: {out}", {
-                "dem_input": dem, "output": out,
-                "measurement": params.output_measurement,
-                "statistics": stats,
-            })
+            return tool_result(
+                True,
+                f"Slope raster created: {out}",
+                {
+                    "dem_input": dem,
+                    "output": out,
+                    "measurement": params.output_measurement,
+                    "statistics": stats,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -231,16 +246,22 @@ def register(mcp: FastMCP) -> None:
             def _aspect():
                 import arcpy
                 from arcpy.sa import Aspect
+
                 arcpy.CheckOutExtension("Spatial")
                 result = Aspect(dem)
                 result.save(out)
                 arcpy.CheckInExtension("Spatial")
 
             await run_arcpy(_aspect)
-            return tool_result(True, f"Aspect raster created: {out}", {
-                "dem_input": dem, "output": out,
-                "note": "Values: -1=flat, 0=North, 90=East, 180=South, 270=West",
-            })
+            return tool_result(
+                True,
+                f"Aspect raster created: {out}",
+                {
+                    "dem_input": dem,
+                    "output": out,
+                    "note": "Values: -1=flat, 0=North, 90=East, 180=South, 270=West",
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -281,16 +302,23 @@ def register(mcp: FastMCP) -> None:
             def _hillshade():
                 import arcpy
                 from arcpy.sa import Hillshade
+
                 arcpy.CheckOutExtension("Spatial")
                 result = Hillshade(dem, params.azimuth, params.altitude, "NO_SHADOWS", params.z_factor)
                 result.save(out)
                 arcpy.CheckInExtension("Spatial")
 
             await run_arcpy(_hillshade)
-            return tool_result(True, f"Hillshade created: {out}", {
-                "dem_input": dem, "output": out,
-                "azimuth": params.azimuth, "altitude": params.altitude,
-            })
+            return tool_result(
+                True,
+                f"Hillshade created: {out}",
+                {
+                    "dem_input": dem,
+                    "output": out,
+                    "azimuth": params.azimuth,
+                    "altitude": params.altitude,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -329,6 +357,7 @@ def register(mcp: FastMCP) -> None:
             def _contour():
                 import arcpy
                 from arcpy.sa import Contour
+
                 arcpy.CheckOutExtension("Spatial")
                 Contour(dem, out, params.contour_interval, params.base_contour)
                 count = int(arcpy.management.GetCount(out).getOutput(0))
@@ -336,11 +365,16 @@ def register(mcp: FastMCP) -> None:
                 return count
 
             count = await run_arcpy(_contour)
-            return tool_result(True, f"Generated {count} contour lines in {out}", {
-                "dem_input": dem, "output": out,
-                "contour_interval": params.contour_interval,
-                "contour_count": count,
-            })
+            return tool_result(
+                True,
+                f"Generated {count} contour lines in {out}",
+                {
+                    "dem_input": dem,
+                    "output": out,
+                    "contour_interval": params.contour_interval,
+                    "contour_count": count,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -382,6 +416,7 @@ def register(mcp: FastMCP) -> None:
             def _fill():
                 import arcpy
                 from arcpy.sa import Fill
+
                 arcpy.CheckOutExtension("Spatial")
                 if params.z_limit is not None:
                     result = Fill(dem, params.z_limit)
@@ -391,10 +426,16 @@ def register(mcp: FastMCP) -> None:
                 arcpy.CheckInExtension("Spatial")
 
             await run_arcpy(_fill)
-            return tool_result(True, f"Filled DEM saved: {out}", {
-                "dem_input": dem, "output": out, "z_limit": params.z_limit,
-                "next_step": "Run arcgis_flow_direction on this output",
-            })
+            return tool_result(
+                True,
+                f"Filled DEM saved: {out}",
+                {
+                    "dem_input": dem,
+                    "output": out,
+                    "z_limit": params.z_limit,
+                    "next_step": "Run arcgis_flow_direction on this output",
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -433,17 +474,23 @@ def register(mcp: FastMCP) -> None:
             def _flow_dir():
                 import arcpy
                 from arcpy.sa import FlowDirection
+
                 arcpy.CheckOutExtension("Spatial")
                 result = FlowDirection(dem, "NORMAL", None, params.flow_direction_type)
                 result.save(out)
                 arcpy.CheckInExtension("Spatial")
 
             await run_arcpy(_flow_dir)
-            return tool_result(True, f"Flow direction raster saved: {out}", {
-                "filled_dem": dem, "output": out,
-                "flow_type": params.flow_direction_type,
-                "next_step": "Run arcgis_flow_accumulation on this output",
-            })
+            return tool_result(
+                True,
+                f"Flow direction raster saved: {out}",
+                {
+                    "filled_dem": dem,
+                    "output": out,
+                    "flow_type": params.flow_direction_type,
+                    "next_step": "Run arcgis_flow_accumulation on this output",
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -482,6 +529,7 @@ def register(mcp: FastMCP) -> None:
             def _accum():
                 import arcpy
                 from arcpy.sa import FlowAccumulation
+
                 arcpy.CheckOutExtension("Spatial")
                 result = FlowAccumulation(fdir, None, params.data_type)
                 result.save(out)
@@ -490,11 +538,16 @@ def register(mcp: FastMCP) -> None:
                 return max_v
 
             max_acc = await run_arcpy(_accum)
-            return tool_result(True, f"Flow accumulation raster saved: {out}", {
-                "flow_direction_input": fdir, "output": out,
-                "max_accumulation": max_acc,
-                "tip": f"High-flow cells (drainage channels): flow_accumulation > {int(max_acc * 0.001)}",
-            })
+            return tool_result(
+                True,
+                f"Flow accumulation raster saved: {out}",
+                {
+                    "flow_direction_input": fdir,
+                    "output": out,
+                    "max_accumulation": max_acc,
+                    "tip": f"High-flow cells (drainage channels): flow_accumulation > {int(max_acc * 0.001)}",
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -536,6 +589,7 @@ def register(mcp: FastMCP) -> None:
             def _watershed():
                 import arcpy
                 from arcpy.sa import Watershed
+
                 arcpy.CheckOutExtension("Spatial")
                 field = params.pour_point_field or ""
                 result = Watershed(fdir, pour, field if field else None)
@@ -543,9 +597,15 @@ def register(mcp: FastMCP) -> None:
                 arcpy.CheckInExtension("Spatial")
 
             await run_arcpy(_watershed)
-            return tool_result(True, f"Watershed raster saved: {out}", {
-                "flow_direction": fdir, "pour_points": pour, "output": out,
-            })
+            return tool_result(
+                True,
+                f"Watershed raster saved: {out}",
+                {
+                    "flow_direction": fdir,
+                    "pour_points": pour,
+                    "output": out,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -592,17 +652,20 @@ def register(mcp: FastMCP) -> None:
             def _classify():
                 import arcpy
                 from arcpy.sa import Reclassify, RemapRange, Slope
+
                 arcpy.CheckOutExtension("Spatial")
 
                 slope_raster = Slope(dem, "DEGREE", 1.0)
 
                 if scheme == "PLANTATION":
-                    remap = RemapRange([
-                        [0, 8, 1],
-                        [8, 15, 2],
-                        [15, 25, 3],
-                        [25, 90, 4],
-                    ])
+                    remap = RemapRange(
+                        [
+                            [0, 8, 1],
+                            [8, 15, 2],
+                            [15, 25, 3],
+                            [25, 90, 4],
+                        ]
+                    )
                     class_desc = {
                         "1": "0-8° (Flat - suitable mechanised)",
                         "2": "8-15° (Gentle - manual harvesting)",
@@ -610,13 +673,15 @@ def register(mcp: FastMCP) -> None:
                         "4": ">25° (Steep - unsuitable/conservation)",
                     }
                 else:
-                    remap = RemapRange([
-                        [0, 5, 1],
-                        [5, 15, 2],
-                        [15, 30, 3],
-                        [30, 45, 4],
-                        [45, 90, 5],
-                    ])
+                    remap = RemapRange(
+                        [
+                            [0, 5, 1],
+                            [5, 15, 2],
+                            [15, 30, 3],
+                            [30, 45, 4],
+                            [45, 90, 5],
+                        ]
+                    )
                     class_desc = {
                         "1": "0-5° (Datar)",
                         "2": "5-15° (Landai)",
@@ -631,11 +696,16 @@ def register(mcp: FastMCP) -> None:
                 return class_desc
 
             class_desc = await run_arcpy(_classify)
-            return tool_result(True, f"Slope classified and saved: {out}", {
-                "dem_input": dem, "output": out,
-                "scheme": scheme,
-                "class_descriptions": class_desc,
-                "tip": "Use arcgis_zonal_statistics to compute area per class within each plot",
-            })
+            return tool_result(
+                True,
+                f"Slope classified and saved: {out}",
+                {
+                    "dem_input": dem,
+                    "output": out,
+                    "scheme": scheme,
+                    "class_descriptions": class_desc,
+                    "tip": "Use arcgis_zonal_statistics to compute area per class within each plot",
+                },
+            )
         except Exception as e:
             return format_error(e)

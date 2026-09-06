@@ -40,7 +40,7 @@ ArcGIS Pro 3.x API notes (differs from 2.x):
   - listStyleItems style_class: "NORTH_ARROW", "SCALE_BAR", "LEGEND" (uppercase)
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -49,17 +49,37 @@ from utils.helpers import format_error, run_arcpy, success_json, tool_result, va
 
 # Paper sizes: name → (portrait_width_inches, portrait_height_inches)
 PAPER_SIZES = {
-    "A4":      (8.27,  11.69),
-    "A3":      (11.69, 16.54),
-    "A2":      (16.54, 23.39),
-    "A1":      (23.39, 33.11),
-    "A0":      (33.11, 46.81),
-    "Letter":  (8.5,   11.0),
-    "Tabloid": (11.0,  17.0),
+    "A4": (8.27, 11.69),
+    "A3": (11.69, 16.54),
+    "A2": (16.54, 23.39),
+    "A1": (23.39, 33.11),
+    "A0": (33.11, 46.81),
+    "Letter": (8.5, 11.0),
+    "Tabloid": (11.0, 17.0),
 }
 
-VALID_PAPER_SIZES  = list(PAPER_SIZES.keys())
+VALID_PAPER_SIZES = list(PAPER_SIZES.keys())
 VALID_EXPORT_FORMATS = ["PDF", "PNG", "JPG", "TIFF"]
+
+
+def _rect_poly(x0, y0, x1, y1):
+    """arcpy.Polygon from corner coords (for createPredefinedGraphicElement).
+
+    Module-level so every layout builder (_create, _build_formal, _divider)
+    can use it; previously nested inside _create -> NameError elsewhere.
+    """
+    import arcpy
+
+    arr = arcpy.Array(
+        [
+            arcpy.Point(x0, y0),
+            arcpy.Point(x0, y1),
+            arcpy.Point(x1, y1),
+            arcpy.Point(x1, y0),
+            arcpy.Point(x0, y0),
+        ]
+    )
+    return arcpy.Polygon(arr)
 
 
 def register(mcp: FastMCP) -> None:
@@ -71,6 +91,7 @@ def register(mcp: FastMCP) -> None:
 
     class CreateMapLayoutInput(BaseModel):
         """Input model for arcgis_create_map_layout."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
         # ── Required ──────────────────────────────────────────────────────
@@ -113,21 +134,21 @@ def register(mcp: FastMCP) -> None:
         )
 
         # ── Title block ───────────────────────────────────────────────────
-        title: Optional[str] = Field(
+        title: str | None = Field(
             default=None,
             description="Main map title, e.g. 'PETA KAWASAN HUTAN'. Defaults to map_name.",
         )
-        subtitle: Optional[str] = Field(
+        subtitle: str | None = Field(
             default=None,
             description="Secondary title line (area name, permit number, year, etc.).",
         )
-        company_name: Optional[str] = Field(
+        company_name: str | None = Field(
             default=None,
             description="Company / organisation name shown in the title block.",
         )
 
         # ── Formal-only extras ────────────────────────────────────────────
-        company_info: Optional[Dict[str, str]] = Field(
+        company_info: Dict[str, str] | None = Field(
             default=None,
             description=(
                 "Company location dict for formal panel. "
@@ -143,7 +164,7 @@ def register(mcp: FastMCP) -> None:
                 "(e.g. road classification totals, area breakdown)."
             ),
         )
-        statistics_data: Optional[List[Dict[str, str]]] = Field(
+        statistics_data: List[Dict[str, str]] | None = Field(
             default=None,
             description=(
                 "Rows for the statistics table. Each dict may have keys: "
@@ -159,7 +180,7 @@ def register(mcp: FastMCP) -> None:
                 "falls back to the main map at a smaller scale."
             ),
         )
-        map_ref: Optional[str] = Field(
+        map_ref: str | None = Field(
             default=None,
             description="Map reference code for the formal footer strip, e.g. 'EBL-2024-001'.",
         )
@@ -183,7 +204,7 @@ def register(mcp: FastMCP) -> None:
         )
 
         # ── Scale ─────────────────────────────────────────────────────────
-        scale: Optional[float] = Field(
+        scale: float | None = Field(
             default=None,
             description=(
                 "Map scale denominator, e.g. 75000 for 1:75,000. "
@@ -197,9 +218,7 @@ def register(mcp: FastMCP) -> None:
         @classmethod
         def validate_paper_size(cls, v: str) -> str:
             if v not in PAPER_SIZES:
-                raise ValueError(
-                    f"Invalid paper_size '{v}'. Choose from: {', '.join(VALID_PAPER_SIZES)}"
-                )
+                raise ValueError(f"Invalid paper_size '{v}'. Choose from: {', '.join(VALID_PAPER_SIZES)}")
             return v
 
         @field_validator("orientation")
@@ -220,11 +239,12 @@ def register(mcp: FastMCP) -> None:
 
     class ExportMapLayoutInput(BaseModel):
         """Input model for arcgis_export_map_layout."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
         project_path: str = Field(..., description="Full path to .aprx file")
-        layout_name:  str = Field(..., description="Name of the layout to export")
-        output_path:  str = Field(..., description="Full output file path including extension")
+        layout_name: str = Field(..., description="Name of the layout to export")
+        output_path: str = Field(..., description="Full output file path including extension")
         format: str = Field(
             default="PDF",
             description=f"Export format: {', '.join(VALID_EXPORT_FORMATS)} (default: PDF)",
@@ -232,7 +252,8 @@ def register(mcp: FastMCP) -> None:
         resolution: int = Field(
             default=300,
             description="Output resolution in DPI (default: 300, max: 2400)",
-            gt=0, le=2400,
+            gt=0,
+            le=2400,
         )
 
         @field_validator("format")
@@ -240,30 +261,30 @@ def register(mcp: FastMCP) -> None:
         def validate_format(cls, v: str) -> str:
             v = v.upper()
             if v not in VALID_EXPORT_FORMATS:
-                raise ValueError(
-                    f"Invalid format '{v}'. Choose from: {', '.join(VALID_EXPORT_FORMATS)}"
-                )
+                raise ValueError(f"Invalid format '{v}'. Choose from: {', '.join(VALID_EXPORT_FORMATS)}")
             return v
 
     class ListMapLayoutsInput(BaseModel):
         """Input model for arcgis_list_map_layouts."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         project_path: str = Field(..., description="Full path to .aprx file")
 
     class UpdateLayoutElementsInput(BaseModel):
         """Input model for arcgis_update_layout_elements."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
         project_path: str = Field(..., description="Full path to .aprx file")
-        layout_name:  str = Field(..., description="Name of the layout to update")
-        title: Optional[str] = Field(
+        layout_name: str = Field(..., description="Name of the layout to update")
+        title: str | None = Field(
             default=None,
             description=(
                 "New title text. Targets TEXT_ELEMENTs whose name contains 'title'; "
                 "falls back to the first text element if only one exists."
             ),
         )
-        scale: Optional[float] = Field(
+        scale: float | None = Field(
             default=None,
             description="New scale denominator for the first map frame, e.g. 25000",
             gt=0,
@@ -319,27 +340,27 @@ def register(mcp: FastMCP) -> None:
             project_path = validate_path(params.project_path)
 
             # Snapshot all params before entering thread
-            map_name           = params.map_name
-            layout_name        = params.layout_name
-            paper_size         = params.paper_size
-            orientation        = params.orientation
-            layout_type        = params.layout_type
-            title_str          = params.title or params.map_name
-            subtitle_str       = params.subtitle or ""
-            company_str        = params.company_name or ""
-            company_info       = params.company_info or {}
-            show_stats         = params.show_statistics_table
-            stats_data         = params.statistics_data or []
-            show_inset         = params.show_inset_map
-            map_ref            = params.map_ref or ""
-            show_north_arrow   = params.show_north_arrow
-            show_legend        = params.show_legend
-            show_approval      = params.show_approval_block
-            scale              = params.scale
+            map_name = params.map_name
+            layout_name = params.layout_name
+            paper_size = params.paper_size
+            orientation = params.orientation
+            layout_type = params.layout_type
+            title_str = params.title or params.map_name
+            subtitle_str = params.subtitle or ""
+            company_str = params.company_name or ""
+            company_info = params.company_info or {}
+            show_stats = params.show_statistics_table
+            stats_data = params.statistics_data or []
+            show_inset = params.show_inset_map
+            map_ref = params.map_ref or ""
+            show_north_arrow = params.show_north_arrow
+            show_legend = params.show_legend
+            show_approval = params.show_approval_block
+            scale = params.scale
 
             def _create():
+
                 import arcpy
-                from datetime import date
 
                 project = arcpy.mp.ArcGISProject(project_path)
 
@@ -358,12 +379,9 @@ def register(mcp: FastMCP) -> None:
 
                 # ── Target map ──────────────────────────────────────────
                 all_maps = project.listMaps()
-                matches  = [m for m in all_maps if m.name == map_name]
+                matches = [m for m in all_maps if m.name == map_name]
                 if not matches:
-                    raise ValueError(
-                        f"Map '{map_name}' not found in project. "
-                        f"Available: {[m.name for m in all_maps]}"
-                    )
+                    raise ValueError(f"Map '{map_name}' not found in project. Available: {[m.name for m in all_maps]}")
                 m = matches[0]
 
                 elements_added = []
@@ -374,36 +392,31 @@ def register(mcp: FastMCP) -> None:
                     for cat in cats:
                         try:
                             # Empty query string returns 0 items in Pro 3.x — omit it
-                            items = (project.listStyleItems("ArcGIS 2D", cat, query)
-                                     if query
-                                     else project.listStyleItems("ArcGIS 2D", cat))
+                            items = (
+                                project.listStyleItems("ArcGIS 2D", cat, query)
+                                if query
+                                else project.listStyleItems("ArcGIS 2D", cat)
+                            )
                             if items:
                                 return items[0]
                         except Exception:
                             pass
                     return None
 
-                def _rect_poly(x0, y0, x1, y1):
-                    """arcpy.Polygon from corner coords (for createPredefinedGraphicElement)."""
-                    arr = arcpy.Array([
-                        arcpy.Point(x0, y0), arcpy.Point(x0, y1),
-                        arcpy.Point(x1, y1), arcpy.Point(x1, y0),
-                        arcpy.Point(x0, y0),
-                    ])
-                    return arcpy.Polygon(arr)
-
                 def _text(name, x0, y0, x1, y1, txt, size=8.0, bold=False, italic=False):
                     try:
-                        _fs = ("Bold Italic" if bold and italic
-                               else "Bold" if bold
-                               else "Italic" if italic
-                               else "Regular")
+                        _fs = (
+                            "Bold Italic" if bold and italic else "Bold" if bold else "Italic" if italic else "Regular"
+                        )
                         te = project.createTextElement(
                             lyt,
                             arcpy.Point((x0 + x1) / 2, y1),
-                            "POINT", txt,
-                            text_size=size, font_family_name="Arial",
-                            font_style_name=_fs, name=name,
+                            "POINT",
+                            txt,
+                            text_size=size,
+                            font_family_name="Arial",
+                            font_style_name=_fs,
+                            name=name,
                         )
                         try:
                             te.anchor = "TOP_MID"
@@ -420,7 +433,10 @@ def register(mcp: FastMCP) -> None:
                     try:
                         lyt.createMapSurroundElement(
                             arcpy.Extent(x0, y0, x1, y1),
-                            surround_type, frame or mf, si, name,
+                            surround_type,
+                            frame or mf,
+                            si,
+                            name,
                         )
                         elements_added.append(name)
                         return True
@@ -428,9 +444,7 @@ def register(mcp: FastMCP) -> None:
                         return False
 
                 def _map_frame(name, x0, y0, x1, y1, target_map, cam_scale=None):
-                    frame = lyt.createMapFrame(
-                        arcpy.Extent(x0, y0, x1, y1), target_map, name
-                    )
+                    frame = lyt.createMapFrame(arcpy.Extent(x0, y0, x1, y1), target_map, name)
                     elements_added.append(name)
                     if cam_scale is not None:
                         try:
@@ -442,34 +456,63 @@ def register(mcp: FastMCP) -> None:
                 # ── Layout-specific geometry ────────────────────────────
                 if layout_type == "informal":
                     mf = _build_informal(
-                        arcpy, lyt, m, pw, ph,
-                        elements_added, _si, _text, _surround, _map_frame,
-                        title_str, subtitle_str, company_str,
-                        scale, show_north_arrow, show_legend,
+                        arcpy,
+                        lyt,
+                        m,
+                        pw,
+                        ph,
+                        elements_added,
+                        _si,
+                        _text,
+                        _surround,
+                        _map_frame,
+                        title_str,
+                        subtitle_str,
+                        company_str,
+                        scale,
+                        show_north_arrow,
+                        show_legend,
                         project,
                     )
                 else:
                     mf = _build_formal(
-                        arcpy, lyt, m, pw, ph,
-                        elements_added, _si, _text, _surround, _map_frame,
-                        project, all_maps,
-                        title_str, subtitle_str, company_str,
-                        company_info, show_stats, stats_data,
-                        show_inset, map_ref, show_north_arrow, show_legend,
-                        show_approval, scale,
+                        arcpy,
+                        lyt,
+                        m,
+                        pw,
+                        ph,
+                        elements_added,
+                        _si,
+                        _text,
+                        _surround,
+                        _map_frame,
+                        project,
+                        all_maps,
+                        title_str,
+                        subtitle_str,
+                        company_str,
+                        company_info,
+                        show_stats,
+                        stats_data,
+                        show_inset,
+                        map_ref,
+                        show_north_arrow,
+                        show_legend,
+                        show_approval,
+                        scale,
                     )
 
                 project.save()
 
                 # ── Return summary ──────────────────────────────────────
                 mf_elems = lyt.listElements("MAPFRAME_ELEMENT")
-                mf_main  = mf_elems[0] if mf_elems else None
+                mf_main = mf_elems[0] if mf_elems else None
                 return {
                     "layout_name": lyt.name,
-                    "page_width":  round(lyt.pageWidth, 3),
+                    "page_width": round(lyt.pageWidth, 3),
                     "page_height": round(lyt.pageHeight, 3),
-                    "page_units":  lyt.pageUnits,
-                    "paper_size":  paper_size,
+                    "page_units": lyt.pageUnits,
+                    "paper_size": paper_size,
                     "orientation": orientation,
                     "layout_type": layout_type,
                     "elements_added": elements_added,
@@ -477,20 +520,32 @@ def register(mcp: FastMCP) -> None:
 
             # ── Informal sub-builder ────────────────────────────────────
             def _build_informal(
-                arcpy, lyt, m, pw, ph,
-                elements_added, _si, _text, _surround, _map_frame,
-                title_str, subtitle_str, company_str,
-                scale, show_north_arrow, show_legend,
+                arcpy,
+                lyt,
+                m,
+                pw,
+                ph,
+                elements_added,
+                _si,
+                _text,
+                _surround,
+                _map_frame,
+                title_str,
+                subtitle_str,
+                company_str,
+                scale,
+                show_north_arrow,
+                show_legend,
                 project,
             ):
-                margin     = 0.15
-                panel_sep  = 0.10
+                margin = 0.15
+                panel_sep = 0.10
                 panel_frac = 0.22
 
                 usable_w = pw - 2 * margin
-                ph_      = ph - 2 * margin
-                panel_w  = usable_w * panel_frac
-                mf_w     = usable_w - panel_w - panel_sep
+                ph_ = ph - 2 * margin
+                panel_w = usable_w * panel_frac
+                mf_w = usable_w - panel_w - panel_sep
 
                 mf_x0, mf_y0 = margin, margin
                 mf_x1, mf_y1 = margin + mf_w, ph - margin
@@ -499,7 +554,7 @@ def register(mcp: FastMCP) -> None:
                 py0, py1 = margin, ph - margin
 
                 DIVIDER_H = 0.008
-                GAP       = 0.06
+                GAP = 0.06
 
                 def _divider(y, idx=0):
                     name = f"Divider_{idx}"
@@ -507,7 +562,8 @@ def register(mcp: FastMCP) -> None:
                         project.createPredefinedGraphicElement(
                             lyt,
                             _rect_poly(px0, y - DIVIDER_H / 2, px1, y + DIVIDER_H / 2),
-                            "RECTANGLE", name=name,
+                            "RECTANGLE",
+                            name=name,
                         )
                         elements_added.append(name)
                     except Exception:
@@ -516,13 +572,13 @@ def register(mcp: FastMCP) -> None:
                 mf = _map_frame("Main Map Frame", mf_x0, mf_y0, mf_x1, mf_y1, m, scale)
 
                 # Section heights (proportion of panel height)
-                legend_h     = ph_ * 0.46
+                legend_h = ph_ * 0.46
                 scale_info_h = ph_ * 0.13
-                na_h         = ph_ * 0.17
+                na_h = ph_ * 0.17
                 divider_total = DIVIDER_H * 3 + GAP * 6
-                title_h      = ph_ - legend_h - scale_info_h - na_h - divider_total
+                title_h = ph_ - legend_h - scale_info_h - na_h - divider_total
 
-                cur = py1   # walk downward
+                cur = py1  # walk downward
 
                 # ── Title block ──────────────────────────────────────────
                 # Split "PETA" from main title for visual weight
@@ -534,28 +590,23 @@ def register(mcp: FastMCP) -> None:
                     peta_label = None
                     main_title = title_str
 
-                lbl_h   = min(0.28, title_h * 0.20)
-                comp_h  = min(0.32, title_h * 0.22)
-                main_h  = title_h - lbl_h - comp_h
+                lbl_h = min(0.28, title_h * 0.20)
+                comp_h = min(0.32, title_h * 0.22)
+                main_h = title_h - lbl_h - comp_h
 
                 if peta_label:
-                    _text("Title Label", px0, cur - lbl_h, px1, cur,
-                          peta_label, size=8.5)
+                    _text("Title Label", px0, cur - lbl_h, px1, cur, peta_label, size=8.5)
                     cur -= lbl_h
-                    _text("Title Main", px0, cur - main_h, px1, cur,
-                          main_title, size=13.5, bold=True)
+                    _text("Title Main", px0, cur - main_h, px1, cur, main_title, size=13.5, bold=True)
                     cur -= main_h
                 else:
-                    _text("Title", px0, cur - (lbl_h + main_h), px1, cur,
-                          main_title, size=13.5, bold=True)
-                    cur -= (lbl_h + main_h)
+                    _text("Title", px0, cur - (lbl_h + main_h), px1, cur, main_title, size=13.5, bold=True)
+                    cur -= lbl_h + main_h
 
                 if company_str:
-                    _text("Company Name", px0, cur - comp_h, px1, cur,
-                          company_str, size=9.0, bold=True)
+                    _text("Company Name", px0, cur - comp_h, px1, cur, company_str, size=9.0, bold=True)
                 if subtitle_str:
-                    _text("Subtitle", px0, cur - comp_h, px1, cur,
-                          subtitle_str, size=8.0, italic=True)
+                    _text("Subtitle", px0, cur - comp_h, px1, cur, subtitle_str, size=8.0, italic=True)
                 cur -= comp_h
 
                 # ── Divider 1 ─────────────────────────────────────────
@@ -565,14 +616,19 @@ def register(mcp: FastMCP) -> None:
 
                 # ── North Arrow ──────────────────────────────────────────
                 if show_north_arrow:
-                    na_si   = _si(["NORTH_ARROW"], "ArcGIS North 1") or _si(["NORTH_ARROW"])
+                    na_si = _si(["NORTH_ARROW"], "ArcGIS North 1") or _si(["NORTH_ARROW"])
                     na_size = min(na_h * 0.82, (px1 - px0) * 0.65)
-                    na_cx   = (px0 + px1) / 2
-                    na_mid  = cur - na_h / 2
-                    _surround("North Arrow",
-                              na_cx - na_size / 2, na_mid - na_size / 2,
-                              na_cx + na_size / 2, na_mid + na_size / 2,
-                              na_si, "NORTH_ARROW")
+                    na_cx = (px0 + px1) / 2
+                    na_mid = cur - na_h / 2
+                    _surround(
+                        "North Arrow",
+                        na_cx - na_size / 2,
+                        na_mid - na_size / 2,
+                        na_cx + na_size / 2,
+                        na_mid + na_size / 2,
+                        na_si,
+                        "NORTH_ARROW",
+                    )
                 cur -= na_h
 
                 # ── Divider 2 ─────────────────────────────────────────
@@ -582,16 +638,12 @@ def register(mcp: FastMCP) -> None:
 
                 # ── Scale + Projection ───────────────────────────────────
                 denom = int(scale) if scale else None
-                proj_lines = (
-                    [f"1 : {denom:,}"] if denom else ["1 : -"]
-                ) + [
+                proj_lines = ([f"1 : {denom:,}"] if denom else ["1 : -"]) + [
                     "Proyeksi  : TM",
                     "Spheroid  : WGS 1984",
                     "Datum     : WGS 1984",
                 ]
-                _text("Scale and Projection Info",
-                      px0, cur - scale_info_h, px1, cur,
-                      "\n".join(proj_lines), size=7.0)
+                _text("Scale and Projection Info", px0, cur - scale_info_h, px1, cur, "\n".join(proj_lines), size=7.0)
                 cur -= scale_info_h
 
                 # ── Divider 3 ─────────────────────────────────────────
@@ -601,25 +653,30 @@ def register(mcp: FastMCP) -> None:
 
                 # ── Legend ──────────────────────────────────────────────
                 if show_legend:
-                    _surround("Legend", px0, py0, px1, cur,
-                              _si(["LEGEND"]), "LEGEND")
+                    _surround("Legend", px0, py0, px1, cur, _si(["LEGEND"]), "LEGEND")
 
                 # ── Scale Bar (bottom-left of map frame) ─────────────────
                 sb_si = _si(["SCALE_BAR"], "Alternating Scale Bar 1") or _si(["SCALE_BAR"])
                 if sb_si:
                     sb_pad = 0.15
-                    sb_w   = min(2.8, mf_w * 0.30)
-                    _surround("Scale Bar",
-                              mf_x0 + sb_pad, mf_y0 + sb_pad,
-                              mf_x0 + sb_pad + sb_w, mf_y0 + sb_pad + 0.30,
-                              sb_si, "SCALE_BAR")
+                    sb_w = min(2.8, mf_w * 0.30)
+                    _surround(
+                        "Scale Bar",
+                        mf_x0 + sb_pad,
+                        mf_y0 + sb_pad,
+                        mf_x0 + sb_pad + sb_w,
+                        mf_y0 + sb_pad + 0.30,
+                        sb_si,
+                        "SCALE_BAR",
+                    )
 
                 # ── Neat Line border ─────────────────────────────────────
                 try:
                     project.createPredefinedGraphicElement(
                         lyt,
                         _rect_poly(0.06, 0.06, pw - 0.06, ph - 0.06),
-                        "RECTANGLE", name="Neat Line",
+                        "RECTANGLE",
+                        name="Neat Line",
                     )
                     elements_added.append("Neat Line")
                 except Exception:
@@ -629,31 +686,48 @@ def register(mcp: FastMCP) -> None:
 
             # ── Formal sub-builder ──────────────────────────────────────
             def _build_formal(
-                arcpy, lyt, m, pw, ph,
-                elements_added, _si, _text, _surround, _map_frame,
-                project, all_maps,
-                title_str, subtitle_str, company_str,
-                company_info, show_stats, stats_data,
-                show_inset, map_ref, show_north_arrow, show_legend,
-                show_approval, scale,
+                arcpy,
+                lyt,
+                m,
+                pw,
+                ph,
+                elements_added,
+                _si,
+                _text,
+                _surround,
+                _map_frame,
+                project,
+                all_maps,
+                title_str,
+                subtitle_str,
+                company_str,
+                company_info,
+                show_stats,
+                stats_data,
+                show_inset,
+                map_ref,
+                show_north_arrow,
+                show_legend,
+                show_approval,
+                scale,
             ):
                 from datetime import date
 
-                margin     = 0.12
-                panel_sep  = 0.06
-                panel_frac = 0.30      # right panel = 30% of usable
-                footer_h   = 0.32
+                margin = 0.12
+                panel_sep = 0.06
+                panel_frac = 0.30  # right panel = 30% of usable
+                footer_h = 0.32
                 footer_gap = 0.05
-                sb_strip_h = 0.45      # scale bar strip below map frame
-                sb_gap     = 0.05
-                stats_h    = 0.72 if show_stats else 0.0
-                stats_gap  = 0.05 if show_stats else 0.0
+                sb_strip_h = 0.45  # scale bar strip below map frame
+                sb_gap = 0.05
+                stats_h = 0.72 if show_stats else 0.0
+                stats_gap = 0.05 if show_stats else 0.0
 
                 usable_w = pw - 2 * margin
                 usable_h = ph - 2 * margin
 
-                panel_w  = usable_w * panel_frac
-                left_w   = usable_w - panel_w - panel_sep
+                panel_w = usable_w * panel_frac
+                left_w = usable_w - panel_w - panel_sep
 
                 # Vertical zones (bottom → top)
                 footer_y0 = margin
@@ -684,75 +758,77 @@ def register(mcp: FastMCP) -> None:
                 px1 = pw - margin
                 rp_y0 = content_y0
                 rp_y1 = content_y1
-                rp_h  = rp_y1 - rp_y0
+                rp_h = rp_y1 - rp_y0
 
                 # ── Map Frame ───────────────────────────────────────────
                 mf = _map_frame("Main Map Frame", la_x0, mf_y0, la_x1, mf_y1, m, scale)
 
                 # ── Scale bar strip ─────────────────────────────────────
-                sb_si = (_si(["SCALE_BAR"], "Alternating Scale Bar 1")
-                         or _si(["SCALE_BAR"]))
+                sb_si = _si(["SCALE_BAR"], "Alternating Scale Bar 1") or _si(["SCALE_BAR"])
                 if sb_si:
                     sb_pad = 0.10
-                    sb_w   = min(2.8, left_w * 0.40)
-                    _surround("Scale Bar",
-                              la_x0 + sb_pad, sb_y0 + 0.08,
-                              la_x0 + sb_pad + sb_w, sb_y0 + 0.08 + 0.28,
-                              sb_si, "SCALE_BAR")
+                    sb_w = min(2.8, left_w * 0.40)
+                    _surround(
+                        "Scale Bar",
+                        la_x0 + sb_pad,
+                        sb_y0 + 0.08,
+                        la_x0 + sb_pad + sb_w,
+                        sb_y0 + 0.08 + 0.28,
+                        sb_si,
+                        "SCALE_BAR",
+                    )
 
                 # ── Statistics table (optional) ─────────────────────────
                 if show_stats:
-                    rows   = stats_data or []
+                    rows = stats_data or []
                     header = f"{'Deskripsi':<28} {'Nilai':>10}  {'Satuan':<8}"
-                    sep    = "─" * 50
-                    lines  = [header, sep]
+                    sep = "─" * 50
+                    lines = [header, sep]
                     for row in rows:
-                        lbl   = row.get("label", "")[:28]
-                        val   = row.get("value", "")
-                        unit  = row.get("unit", "")
+                        lbl = row.get("label", "")[:28]
+                        val = row.get("value", "")
+                        unit = row.get("unit", "")
                         lines.append(f"{lbl:<28} {val:>10}  {unit:<8}")
                     lines.append(sep)
-                    _text("Statistics Table",
-                          la_x0, stats_y0, la_x1, stats_y1,
-                          "\n".join(lines), size=7.0)
+                    _text("Statistics Table", la_x0, stats_y0, la_x1, stats_y1, "\n".join(lines), size=7.0)
 
                 # ── Right panel sections (top → bottom) ─────────────────
-                gap        = 0.05
+                gap = 0.05
                 approval_h = rp_h * 0.12 if show_approval else 0.0
-                sec  = {
-                    "company":  0.20,
-                    "scale":    0.12,
-                    "title":    0.17,
-                    "legend":   0.30,
-                    "inset":    None,   # fills remaining
+                sec = {
+                    "company": 0.20,
+                    "scale": 0.12,
+                    "title": 0.17,
+                    "legend": 0.30,
+                    "inset": None,  # fills remaining
                 }
                 # Calculate heights
                 fixed_h = sum(v for v in sec.values() if v) * rp_h
-                n_gaps  = (len(sec) - 1 + (1 if show_approval else 0)) * gap
+                n_gaps = (len(sec) - 1 + (1 if show_approval else 0)) * gap
                 inset_h = max(0.3, rp_h - fixed_h - n_gaps - approval_h)
 
                 # Y positions (walk from top)
                 cy = rp_y1
 
                 # Company block
-                comp_h  = sec["company"] * rp_h
+                comp_h = sec["company"] * rp_h
                 co_y0, co_y1 = cy - comp_h, cy
-                cy -= (comp_h + gap)
+                cy -= comp_h + gap
 
                 # Scale / projection info
-                si_h    = sec["scale"] * rp_h
+                si_h = sec["scale"] * rp_h
                 si_y0, si_y1 = cy - si_h, cy
-                cy -= (si_h + gap)
+                cy -= si_h + gap
 
                 # Title block
-                ti_h    = sec["title"] * rp_h
+                ti_h = sec["title"] * rp_h
                 ti_y0, ti_y1 = cy - ti_h, cy
-                cy -= (ti_h + gap)
+                cy -= ti_h + gap
 
                 # Legend
-                leg_h   = sec["legend"] * rp_h
+                leg_h = sec["legend"] * rp_h
                 leg_y0, leg_y1 = cy - leg_h, cy
-                cy -= (leg_h + gap)
+                cy -= leg_h + gap
 
                 # Approval block at very bottom (optional)
                 approval_y0 = rp_y0
@@ -771,60 +847,58 @@ def register(mcp: FastMCP) -> None:
                         if company_info.get(key):
                             comp_lines.append(company_info[key])
                 if comp_lines:
-                    _text("Company Block", px0, co_y0, px1, co_y1,
-                          "\n".join(comp_lines), size=8.0, bold=bool(company_str))
+                    _text(
+                        "Company Block", px0, co_y0, px1, co_y1, "\n".join(comp_lines), size=8.0, bold=bool(company_str)
+                    )
 
                 # ── Scale + projection info ─────────────────────────────
                 denom = int(scale) if scale else None
-                proj  = (([f"Skala  1:{denom:,}"] if denom else []) +
-                         ["Proyeksi : Transverse Mercator",
-                          "Spheroid : WGS 1984",
-                          "Datum    : WGS 1984"])
-                _text("Scale and Projection Info", px0, si_y0, px1, si_y1,
-                      "\n".join(proj), size=6.5)
+                proj = ([f"Skala  1:{denom:,}"] if denom else []) + [
+                    "Proyeksi : Transverse Mercator",
+                    "Spheroid : WGS 1984",
+                    "Datum    : WGS 1984",
+                ]
+                _text("Scale and Projection Info", px0, si_y0, px1, si_y1, "\n".join(proj), size=6.5)
 
                 # ── Title block ─────────────────────────────────────────
                 cur_t = ti_y1
-                t_h   = min(0.65, ti_h * 0.50)
-                _text("Title", px0, cur_t - t_h, px1, cur_t,
-                      title_str, size=13.0, bold=True)
-                cur_t -= (t_h + 0.03)
+                t_h = min(0.65, ti_h * 0.50)
+                _text("Title", px0, cur_t - t_h, px1, cur_t, title_str, size=13.0, bold=True)
+                cur_t -= t_h + 0.03
                 if subtitle_str and cur_t > ti_y0 + 0.15:
                     sub_h = min(0.35, cur_t - ti_y0)
-                    _text("Subtitle", px0, cur_t - sub_h, px1, cur_t,
-                          subtitle_str, size=8.5)
+                    _text("Subtitle", px0, cur_t - sub_h, px1, cur_t, subtitle_str, size=8.5)
 
                 # ── Legend ──────────────────────────────────────────────
                 if show_legend:
                     # Optional north arrow above legend if space allows
                     if show_north_arrow and leg_h > 1.5:
-                        na_si   = (_si(["NORTH_ARROW"], "ArcGIS North 1")
-                                   or _si(["NORTH_ARROW"]))
+                        na_si = _si(["NORTH_ARROW"], "ArcGIS North 1") or _si(["NORTH_ARROW"])
                         na_size = min(0.70, (px1 - px0) * 0.30)
-                        na_cx   = (px0 + px1) / 2
-                        na_y1_  = leg_y1
-                        _surround("North Arrow",
-                                  na_cx - na_size / 2, na_y1_ - na_size,
-                                  na_cx + na_size / 2, na_y1_,
-                                  na_si, "NORTH_ARROW")
-                        leg_y1 -= (na_size + 0.04)
+                        na_cx = (px0 + px1) / 2
+                        na_y1_ = leg_y1
+                        _surround(
+                            "North Arrow",
+                            na_cx - na_size / 2,
+                            na_y1_ - na_size,
+                            na_cx + na_size / 2,
+                            na_y1_,
+                            na_si,
+                            "NORTH_ARROW",
+                        )
+                        leg_y1 -= na_size + 0.04
 
-                    _surround("Legend", px0, leg_y0, px1, leg_y1,
-                              _si(["LEGEND"]), "LEGEND")
+                    _surround("Legend", px0, leg_y0, px1, leg_y1, _si(["LEGEND"]), "LEGEND")
 
                 # ── Inset / locator map ─────────────────────────────────
                 if show_inset and ins_y1 > ins_y0 + 0.3:
                     # Find overview map (or fall back to same map)
-                    locator_names = {"locator", "overview", "inset",
-                                     "indonesia", "kalimantan"}
+                    locator_names = {"locator", "overview", "inset", "indonesia", "kalimantan"}
                     locator_map = next(
-                        (mm for mm in all_maps
-                         if mm.name.lower() in locator_names),
-                        m,    # fall back: same map, smaller scale
+                        (mm for mm in all_maps if mm.name.lower() in locator_names),
+                        m,  # fall back: same map, smaller scale
                     )
-                    inset_frame = _map_frame(
-                        "Inset Map", px0, ins_y0, px1, ins_y1, locator_map
-                    )
+                    inset_frame = _map_frame("Inset Map", px0, ins_y0, px1, ins_y1, locator_map)
                     # Zoom out significantly if using the same map
                     if locator_map is m and scale:
                         try:
@@ -840,14 +914,21 @@ def register(mcp: FastMCP) -> None:
                         "Disetujui    : ________________\n"
                         "Tanggal      : ________________"
                     )
-                    _text("Approval Block", px0, approval_y0, px1, approval_y1,
-                          approval_text, size=6.5)
+                    _text("Approval Block", px0, approval_y0, px1, approval_y1, approval_text, size=6.5)
 
                 # ── Footer strip (full page width) ──────────────────────
-                today    = date.today().strftime("%d %B %Y")
+                today = date.today().strftime("%d %B %Y")
                 ref_part = f"MAP REF: {map_ref}  |  " if map_ref else ""
-                _text("Footer", margin, footer_y0, pw - margin, footer_y1,
-                      f"{ref_part}Dibuat: {today}", size=6.5, italic=True)
+                _text(
+                    "Footer",
+                    margin,
+                    footer_y0,
+                    pw - margin,
+                    footer_y1,
+                    f"{ref_part}Dibuat: {today}",
+                    size=6.5,
+                    italic=True,
+                )
 
                 # ── Double neat line ────────────────────────────────────
                 for name, off in [("Neat Line Outer", 0.05), ("Neat Line Inner", 0.13)]:
@@ -855,7 +936,8 @@ def register(mcp: FastMCP) -> None:
                         project.createPredefinedGraphicElement(
                             lyt,
                             _rect_poly(off, off, pw - off, ph - off),
-                            "RECTANGLE", name=name,
+                            "RECTANGLE",
+                            name=name,
                         )
                         elements_added.append(name)
                     except Exception:
@@ -904,19 +986,19 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             project_path = validate_path(params.project_path)
-            layout_name  = params.layout_name
-            output_path  = params.output_path.strip().replace("\\", "/")
-            fmt          = params.format
-            resolution   = params.resolution
+            layout_name = params.layout_name
+            output_path = params.output_path.strip().replace("\\", "/")
+            fmt = params.format
+            resolution = params.resolution
 
             def _export():
                 import arcpy
+
                 project = arcpy.mp.ArcGISProject(project_path)
                 layouts = [lyt for lyt in project.listLayouts() if lyt.name == layout_name]
                 if not layouts:
                     raise ValueError(
-                        f"Layout '{layout_name}' not found. "
-                        f"Available: {[lyt.name for lyt in project.listLayouts()]}"
+                        f"Layout '{layout_name}' not found. Available: {[lyt.name for lyt in project.listLayouts()]}"
                     )
                 lyt = layouts[0]
                 if fmt == "PDF":
@@ -933,8 +1015,7 @@ def register(mcp: FastMCP) -> None:
             return tool_result(
                 True,
                 f"Exported '{layout_name}' to {out} ({fmt}, {resolution} DPI)",
-                {"output_path": out, "format": fmt,
-                 "resolution": resolution, "layout_name": layout_name},
+                {"output_path": out, "format": fmt, "resolution": resolution, "layout_name": layout_name},
             )
 
         except Exception as e:
@@ -969,26 +1050,31 @@ def register(mcp: FastMCP) -> None:
 
             def _list():
                 import arcpy
+
                 project = arcpy.mp.ArcGISProject(project_path)
                 result = []
                 for lyt in project.listLayouts():
                     elems = lyt.listElements()
-                    result.append({
-                        "name":          lyt.name,
-                        "page_width":    round(lyt.pageWidth, 3),
-                        "page_height":   round(lyt.pageHeight, 3),
-                        "page_units":    lyt.pageUnits,
-                        "element_count": len(elems),
-                        "elements":      [e.name for e in elems],
-                    })
+                    result.append(
+                        {
+                            "name": lyt.name,
+                            "page_width": round(lyt.pageWidth, 3),
+                            "page_height": round(lyt.pageHeight, 3),
+                            "page_units": lyt.pageUnits,
+                            "element_count": len(elems),
+                            "elements": [e.name for e in elems],
+                        }
+                    )
                 return result
 
             layouts = await run_arcpy(_list)
-            return success_json({
-                "project_path": project_path,
-                "layout_count": len(layouts),
-                "layouts":      layouts,
-            })
+            return success_json(
+                {
+                    "project_path": project_path,
+                    "layout_count": len(layouts),
+                    "layouts": layouts,
+                }
+            )
 
         except Exception as e:
             return format_error(e)
@@ -1024,24 +1110,24 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             project_path = validate_path(params.project_path)
-            layout_name  = params.layout_name
-            new_title    = params.title
-            new_scale    = params.scale
+            layout_name = params.layout_name
+            new_title = params.title
+            new_scale = params.scale
 
             def _update():
                 import arcpy
+
                 project = arcpy.mp.ArcGISProject(project_path)
                 layouts = [lyt for lyt in project.listLayouts() if lyt.name == layout_name]
                 if not layouts:
                     raise ValueError(
-                        f"Layout '{layout_name}' not found. "
-                        f"Available: {[lyt.name for lyt in project.listLayouts()]}"
+                        f"Layout '{layout_name}' not found. Available: {[lyt.name for lyt in project.listLayouts()]}"
                     )
-                lyt     = layouts[0]
+                lyt = layouts[0]
                 changes = []
 
                 if new_title is not None:
-                    text_elems  = lyt.listElements("TEXT_ELEMENT")
+                    text_elems = lyt.listElements("TEXT_ELEMENT")
                     title_elems = [e for e in text_elems if "title" in e.name.lower()]
                     if title_elems:
                         for te in title_elems:
@@ -1052,8 +1138,7 @@ def register(mcp: FastMCP) -> None:
                         changes.append(f"text element → '{new_title}'")
                     else:
                         changes.append(
-                            f"title: no element named 'title' found "
-                            f"(elements: {[e.name for e in text_elems]})"
+                            f"title: no element named 'title' found (elements: {[e.name for e in text_elems]})"
                         )
 
                 if new_scale is not None:

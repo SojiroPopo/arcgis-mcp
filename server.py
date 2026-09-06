@@ -38,8 +38,8 @@ Usage:
     }
 """
 
-import sys
 import os
+import sys
 
 # Ensure the project root is on sys.path so relative imports work
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -47,7 +47,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mcp.server.fastmcp import FastMCP
 
 # Import tool registration functions
-from tools import data_io, geoprocessing, terrain, raster_analysis, map_layout
+from tools import data_io, geoprocessing, map_layout, raster_analysis, terrain
 
 # ---------------------------------------------------------------------------
 # Server initialisation
@@ -82,7 +82,11 @@ if __name__ == "__main__":
     # Verify arcpy is importable before starting
     try:
         import arcpy
-        print(f"[arcgis_mcp] arcpy loaded. ArcGIS Pro version: {arcpy.GetInstallInfo().get('Version', 'unknown')}", file=sys.stderr)
+
+        print(
+            f"[arcgis_mcp] arcpy loaded. ArcGIS Pro version: {arcpy.GetInstallInfo().get('Version', 'unknown')}",
+            file=sys.stderr,
+        )
     except ImportError:
         print(
             "[arcgis_mcp] WARNING: arcpy not found. "

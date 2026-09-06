@@ -6,7 +6,7 @@ clip, buffer, intersect, union, dissolve, spatial join, project, and select.
 """
 
 import os
-from typing import List, Optional
+from typing import List
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -23,13 +23,22 @@ def register(mcp: FastMCP) -> None:
 
     class ClipInput(BaseModel):
         """Input model for arcgis_clip."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-        input_features: str = Field(..., description="Path to the feature class to be clipped (e.g. 'D:/data/roads.shp')")
-        clip_features: str = Field(..., description="Path to the polygon feature class used as clip boundary (e.g. 'D:/data/kebun_boundary.shp')")
-        output_path: str = Field(..., description="Full output path including filename (e.g. 'D:/output/roads_clipped.shp')")
+        input_features: str = Field(
+            ..., description="Path to the feature class to be clipped (e.g. 'D:/data/roads.shp')"
+        )
+        clip_features: str = Field(
+            ...,
+            description="Path to the polygon feature class used as clip boundary (e.g. 'D:/data/kebun_boundary.shp')",
+        )
+        output_path: str = Field(
+            ..., description="Full output path including filename (e.g. 'D:/output/roads_clipped.shp')"
+        )
 
     class BufferInput(BaseModel):
         """Input model for arcgis_buffer."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_features: str = Field(..., description="Path to input feature class (points, lines, or polygons)")
         output_path: str = Field(..., description="Full output path including filename")
@@ -42,7 +51,7 @@ def register(mcp: FastMCP) -> None:
             default="NONE",
             description="How to dissolve output: 'NONE' (keep all buffers separate), 'ALL' (merge all into one), 'LIST' (merge by field). Default: 'NONE'",
         )
-        dissolve_fields: Optional[List[str]] = Field(
+        dissolve_fields: List[str] | None = Field(
             default=None,
             description="Field names to dissolve by when dissolve_option='LIST', e.g. ['DIVISI', 'AFDELING']",
         )
@@ -58,6 +67,7 @@ def register(mcp: FastMCP) -> None:
 
     class IntersectInput(BaseModel):
         """Input model for arcgis_intersect."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_features: List[str] = Field(
             ...,
@@ -72,6 +82,7 @@ def register(mcp: FastMCP) -> None:
 
     class UnionInput(BaseModel):
         """Input model for arcgis_union."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_features: List[str] = Field(
             ...,
@@ -82,20 +93,22 @@ def register(mcp: FastMCP) -> None:
 
     class DissolveInput(BaseModel):
         """Input model for arcgis_dissolve."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_features: str = Field(..., description="Path to input polygon feature class")
         output_path: str = Field(..., description="Full output path including filename")
-        dissolve_fields: Optional[List[str]] = Field(
+        dissolve_fields: List[str] | None = Field(
             default=None,
             description="Field names to group by during dissolve, e.g. ['DIVISI', 'AFDELING']. If None, dissolves all features into one.",
         )
-        statistics_fields: Optional[List[str]] = Field(
+        statistics_fields: List[str] | None = Field(
             default=None,
             description="Statistics to compute in format 'FIELD STATISTIC', e.g. ['LUAS_HA SUM', 'POHON COUNT']",
         )
 
     class SpatialJoinInput(BaseModel):
         """Input model for arcgis_spatial_join."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         target_features: str = Field(..., description="Path to target feature class (receives attributes from join)")
         join_features: str = Field(..., description="Path to join feature class (attributes transferred from this)")
@@ -111,6 +124,7 @@ def register(mcp: FastMCP) -> None:
 
     class ProjectInput(BaseModel):
         """Input model for arcgis_project."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_dataset: str = Field(..., description="Path to input feature class or raster to reproject")
         output_dataset: str = Field(..., description="Full output path including filename")
@@ -124,6 +138,7 @@ def register(mcp: FastMCP) -> None:
 
     class SelectByAttributeInput(BaseModel):
         """Input model for arcgis_select_by_attribute."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_features: str = Field(..., description="Path to input feature class")
         output_path: str = Field(..., description="Full output path for selected features")
@@ -135,6 +150,7 @@ def register(mcp: FastMCP) -> None:
 
     class EraseInput(BaseModel):
         """Input model for arcgis_erase."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_features: str = Field(..., description="Path to input feature class from which areas will be erased")
         erase_features: str = Field(..., description="Path to polygon feature class defining areas to erase")
@@ -142,6 +158,7 @@ def register(mcp: FastMCP) -> None:
 
     class RepairGeometryInput(BaseModel):
         """Input model for arcgis_repair_geometry."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
         input_features: str = Field(..., description="Path to feature class with geometry to repair")
 
@@ -184,14 +201,22 @@ def register(mcp: FastMCP) -> None:
 
             def _clip():
                 import arcpy
+
                 arcpy.analysis.Clip(in_fc, clip_fc, out)
                 count = int(arcpy.management.GetCount(out).getOutput(0))
                 return count
 
             count = await run_arcpy(_clip)
-            return tool_result(True, f"Clip completed. {count} features written to {out}", {
-                "input": in_fc, "clip_boundary": clip_fc, "output": out, "feature_count": count,
-            })
+            return tool_result(
+                True,
+                f"Clip completed. {count} features written to {out}",
+                {
+                    "input": in_fc,
+                    "clip_boundary": clip_fc,
+                    "output": out,
+                    "feature_count": count,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -238,6 +263,7 @@ def register(mcp: FastMCP) -> None:
 
             def _buffer():
                 import arcpy
+
                 arcpy.analysis.Buffer(
                     in_features=in_fc,
                     out_feature_class=out,
@@ -249,11 +275,17 @@ def register(mcp: FastMCP) -> None:
                 return count
 
             count = await run_arcpy(_buffer)
-            return tool_result(True, f"Buffer {dist_str} completed. {count} features in {out}", {
-                "input": in_fc, "output": out,
-                "distance": dist_str, "dissolve_option": dissolve,
-                "feature_count": count,
-            })
+            return tool_result(
+                True,
+                f"Buffer {dist_str} completed. {count} features in {out}",
+                {
+                    "input": in_fc,
+                    "output": out,
+                    "distance": dist_str,
+                    "dissolve_option": dissolve,
+                    "feature_count": count,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -295,15 +327,22 @@ def register(mcp: FastMCP) -> None:
 
             def _intersect():
                 import arcpy
+
                 arcpy.analysis.Intersect(in_fcs, out, join_attributes=join_attr)
                 count = int(arcpy.management.GetCount(out).getOutput(0))
                 return count
 
             count = await run_arcpy(_intersect)
-            return tool_result(True, f"Intersect completed. {count} features in {out}", {
-                "inputs": in_fcs, "output": out,
-                "join_attributes": join_attr, "feature_count": count,
-            })
+            return tool_result(
+                True,
+                f"Intersect completed. {count} features in {out}",
+                {
+                    "inputs": in_fcs,
+                    "output": out,
+                    "join_attributes": join_attr,
+                    "feature_count": count,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -339,14 +378,21 @@ def register(mcp: FastMCP) -> None:
 
             def _union():
                 import arcpy
+
                 arcpy.analysis.Union(in_fcs, out)
                 count = int(arcpy.management.GetCount(out).getOutput(0))
                 return count
 
             count = await run_arcpy(_union)
-            return tool_result(True, f"Union completed. {count} features in {out}", {
-                "inputs": in_fcs, "output": out, "feature_count": count,
-            })
+            return tool_result(
+                True,
+                f"Union completed. {count} features in {out}",
+                {
+                    "inputs": in_fcs,
+                    "output": out,
+                    "feature_count": count,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -392,6 +438,7 @@ def register(mcp: FastMCP) -> None:
 
             def _dissolve():
                 import arcpy
+
                 stat_fields = [[s.rsplit(" ", 1)[0], s.rsplit(" ", 1)[1]] for s in stats if " " in s]
                 arcpy.management.Dissolve(
                     in_features=in_fc,
@@ -403,12 +450,17 @@ def register(mcp: FastMCP) -> None:
                 return count
 
             count = await run_arcpy(_dissolve)
-            return tool_result(True, f"Dissolve completed. {count} features in {out}", {
-                "input": in_fc, "output": out,
-                "dissolve_fields": d_fields,
-                "statistics_fields": stats,
-                "feature_count": count,
-            })
+            return tool_result(
+                True,
+                f"Dissolve completed. {count} features in {out}",
+                {
+                    "input": in_fc,
+                    "output": out,
+                    "dissolve_fields": d_fields,
+                    "statistics_fields": stats,
+                    "feature_count": count,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -449,6 +501,7 @@ def register(mcp: FastMCP) -> None:
 
             def _sjoin():
                 import arcpy
+
                 arcpy.analysis.SpatialJoin(
                     target_features=target,
                     join_features=join,
@@ -460,12 +513,18 @@ def register(mcp: FastMCP) -> None:
                 return count
 
             count = await run_arcpy(_sjoin)
-            return tool_result(True, f"Spatial join completed. {count} features in {out}", {
-                "target": target, "join": join, "output": out,
-                "join_operation": params.join_operation,
-                "match_option": params.match_option,
-                "feature_count": count,
-            })
+            return tool_result(
+                True,
+                f"Spatial join completed. {count} features in {out}",
+                {
+                    "target": target,
+                    "join": join,
+                    "output": out,
+                    "join_operation": params.join_operation,
+                    "match_option": params.match_option,
+                    "feature_count": count,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -512,16 +571,23 @@ def register(mcp: FastMCP) -> None:
 
             def _project():
                 import arcpy
+
                 sr = arcpy.SpatialReference(int(crs_code))
                 arcpy.management.Project(in_ds, out_ds, sr)
                 desc = arcpy.Describe(out_ds)
                 return desc.spatialReference.name
 
             sr_name = await run_arcpy(_project)
-            return tool_result(True, f"Projected to {sr_name}", {
-                "input": in_ds, "output": out_ds,
-                "target_wkid": crs_code, "spatial_reference": sr_name,
-            })
+            return tool_result(
+                True,
+                f"Projected to {sr_name}",
+                {
+                    "input": in_ds,
+                    "output": out_ds,
+                    "target_wkid": crs_code,
+                    "spatial_reference": sr_name,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -561,6 +627,7 @@ def register(mcp: FastMCP) -> None:
 
             def _select():
                 import arcpy
+
                 lyr = arcpy.management.MakeFeatureLayer(in_fc, "tmp_sel_lyr", where).getOutput(0)
                 arcpy.management.CopyFeatures(lyr, out)
                 arcpy.management.Delete(lyr)
@@ -568,10 +635,16 @@ def register(mcp: FastMCP) -> None:
                 return count
 
             count = await run_arcpy(_select)
-            return tool_result(True, f"Selected {count} features matching '{where}'", {
-                "input": in_fc, "output": out,
-                "where_clause": where, "selected_count": count,
-            })
+            return tool_result(
+                True,
+                f"Selected {count} features matching '{where}'",
+                {
+                    "input": in_fc,
+                    "output": out,
+                    "where_clause": where,
+                    "selected_count": count,
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -641,21 +714,21 @@ def register(mcp: FastMCP) -> None:
                 # Identify fields to copy (skip OID, Shape, and derived fields)
                 skip_upper = {"SHAPE_AREA", "SHAPE_LENGTH", "SHAPE.AREA", "SHAPE.LENGTH"}
                 copy_fields = [
-                    f for f in arcpy.ListFields(in_fc)
-                    if f.type not in ("Geometry", "OID")
-                    and f.name.upper() not in skip_upper
+                    f
+                    for f in arcpy.ListFields(in_fc)
+                    if f.type not in ("Geometry", "OID") and f.name.upper() not in skip_upper
                 ]
                 fld_names = [f.name for f in copy_fields]
 
                 # Step 3: Create output feature class with same schema as input
                 out_ws = os.path.dirname(out)
                 out_name = os.path.basename(out)
-                arcpy.management.CreateFeatureclass(
-                    out_ws, out_name, geom_type, spatial_reference=sr
-                )
+                arcpy.management.CreateFeatureclass(out_ws, out_name, geom_type, spatial_reference=sr)
                 for f in copy_fields:
                     arcpy.management.AddField(
-                        out, f.name, f.type,
+                        out,
+                        f.name,
+                        f.type,
                         field_precision=f.precision,
                         field_scale=f.scale,
                         field_length=f.length,
@@ -667,8 +740,7 @@ def register(mcp: FastMCP) -> None:
                 # Geometry.difference() is available at Basic/Standard license.
                 count = 0
                 read_flds = ["SHAPE@"] + fld_names
-                with arcpy.da.SearchCursor(in_fc, read_flds) as src, \
-                        arcpy.da.InsertCursor(out, read_flds) as dst:
+                with arcpy.da.SearchCursor(in_fc, read_flds) as src, arcpy.da.InsertCursor(out, read_flds) as dst:
                     for row in src:
                         geom = row[0]
                         if geom is None:
@@ -681,11 +753,17 @@ def register(mcp: FastMCP) -> None:
                 return count
 
             count = await run_arcpy(_erase)
-            return tool_result(True, f"Erase completed. {count} features in {out}", {
-                "input": in_fc, "erase_mask": erase_fc,
-                "output": out, "feature_count": count,
-                "method": "geometry_difference (Basic/Standard license compatible)",
-            })
+            return tool_result(
+                True,
+                f"Erase completed. {count} features in {out}",
+                {
+                    "input": in_fc,
+                    "erase_mask": erase_fc,
+                    "output": out,
+                    "feature_count": count,
+                    "method": "geometry_difference (Basic/Standard license compatible)",
+                },
+            )
         except Exception as e:
             return format_error(e)
 
@@ -719,12 +797,18 @@ def register(mcp: FastMCP) -> None:
 
             def _repair():
                 import arcpy
+
                 result = arcpy.management.RepairGeometry(in_fc, "DELETE_NULL")
                 return arcpy.GetMessages()
 
             messages = await run_arcpy(_repair)
-            return tool_result(True, "Geometry repaired successfully.", {
-                "input": in_fc, "arcpy_messages": messages,
-            })
+            return tool_result(
+                True,
+                "Geometry repaired successfully.",
+                {
+                    "input": in_fc,
+                    "arcpy_messages": messages,
+                },
+            )
         except Exception as e:
             return format_error(e)

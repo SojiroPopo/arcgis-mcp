@@ -5,9 +5,6 @@ Provides tools for reading GIS data properties, listing workspace contents,
 describing datasets, listing fields, and exporting data to common formats.
 """
 
-import json
-from typing import List, Optional
-
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -23,6 +20,7 @@ def register(mcp: FastMCP) -> None:
 
     class DescribeDataInput(BaseModel):
         """Input model for arcgis_describe_data."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
         dataset_path: str = Field(
@@ -32,19 +30,21 @@ def register(mcp: FastMCP) -> None:
 
     class ListWorkspaceInput(BaseModel):
         """Input model for arcgis_list_workspace."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
         workspace_path: str = Field(
             ...,
             description="Path to workspace: folder, file geodatabase (.gdb), or .gpkg file",
         )
-        data_type: Optional[str] = Field(
+        data_type: str | None = Field(
             default="All",
             description="Filter by type: 'FeatureClass', 'RasterDataset', 'Table', 'All' (default: 'All')",
         )
 
     class ListFieldsInput(BaseModel):
         """Input model for arcgis_list_fields."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
         dataset_path: str = Field(
@@ -54,19 +54,21 @@ def register(mcp: FastMCP) -> None:
 
     class GetFeatureCountInput(BaseModel):
         """Input model for arcgis_get_feature_count."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
         dataset_path: str = Field(
             ...,
             description="Full path to feature class or table",
         )
-        where_clause: Optional[str] = Field(
+        where_clause: str | None = Field(
             default=None,
             description="Optional SQL WHERE clause to count a subset, e.g. \"LUAS_HA > 50\"",
         )
 
     class ExportDataInput(BaseModel):
         """Input model for arcgis_export_data."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
         input_path: str = Field(
@@ -77,13 +79,14 @@ def register(mcp: FastMCP) -> None:
             ...,
             description="Full output path including filename and extension, e.g. 'D:/output/plots.shp' or 'D:/output/output.gdb/plots'",
         )
-        where_clause: Optional[str] = Field(
+        where_clause: str | None = Field(
             default=None,
             description="Optional SQL WHERE clause to export a subset, e.g. \"DIVISI = 'ALPHA'\"",
         )
 
     class CreateGDBInput(BaseModel):
         """Input model for arcgis_create_gdb."""
+
         model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
         folder_path: str = Field(
@@ -101,6 +104,7 @@ def register(mcp: FastMCP) -> None:
         @classmethod
         def validate_gdb_name(cls, v: str) -> str:
             import re
+
             if not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", v):
                 raise ValueError("GDB name must start with a letter and contain only letters, numbers, or underscores.")
             return v
@@ -267,13 +271,17 @@ def register(mcp: FastMCP) -> None:
                             full_path = f"{ws}/{name}"
                             try:
                                 desc = arcpy.Describe(full_path)
-                                items.append({
-                                    "name": name,
-                                    "path": full_path,
-                                    "dataType": "FeatureClass",
-                                    "shapeType": getattr(desc, "shapeType", None),
-                                    "spatialRef": desc.spatialReference.name if hasattr(desc, "spatialReference") and desc.spatialReference else None,
-                                })
+                                items.append(
+                                    {
+                                        "name": name,
+                                        "path": full_path,
+                                        "dataType": "FeatureClass",
+                                        "shapeType": getattr(desc, "shapeType", None),
+                                        "spatialRef": desc.spatialReference.name
+                                        if hasattr(desc, "spatialReference") and desc.spatialReference
+                                        else None,
+                                    }
+                                )
                             except Exception:
                                 items.append({"name": name, "path": full_path, "dataType": "FeatureClass"})
 
@@ -292,12 +300,14 @@ def register(mcp: FastMCP) -> None:
                 return items
 
             items = await run_arcpy(_list)
-            return success_json({
-                "workspace": ws,
-                "data_type": data_type,
-                "count": len(items),
-                "items": items,
-            })
+            return success_json(
+                {
+                    "workspace": ws,
+                    "data_type": data_type,
+                    "count": len(items),
+                    "items": items,
+                }
+            )
 
         except Exception as e:
             return format_error(e)
@@ -336,6 +346,7 @@ def register(mcp: FastMCP) -> None:
 
             def _fields():
                 import arcpy
+
                 fields = arcpy.ListFields(path)
                 return [
                     {
@@ -352,11 +363,13 @@ def register(mcp: FastMCP) -> None:
                 ]
 
             fields = await run_arcpy(_fields)
-            return success_json({
-                "dataset": path,
-                "field_count": len(fields),
-                "fields": fields,
-            })
+            return success_json(
+                {
+                    "dataset": path,
+                    "field_count": len(fields),
+                    "fields": fields,
+                }
+            )
 
         except Exception as e:
             return format_error(e)
@@ -393,6 +406,7 @@ def register(mcp: FastMCP) -> None:
 
             def _count():
                 import arcpy
+
                 if where:
                     lyr = arcpy.management.MakeFeatureLayer(path, "tmp_lyr_count", where).getOutput(0)
                     result = int(arcpy.management.GetCount(lyr).getOutput(0))
@@ -402,11 +416,13 @@ def register(mcp: FastMCP) -> None:
                 return result
 
             count = await run_arcpy(_count)
-            return success_json({
-                "dataset": path,
-                "where_clause": where,
-                "count": count,
-            })
+            return success_json(
+                {
+                    "dataset": path,
+                    "where_clause": where,
+                    "count": count,
+                }
+            )
 
         except Exception as e:
             return format_error(e)
@@ -447,6 +463,7 @@ def register(mcp: FastMCP) -> None:
 
             def _export():
                 import arcpy
+
                 if where:
                     arcpy.conversion.ExportFeatures(in_path, out_path, where_clause=where)
                 else:
@@ -455,12 +472,16 @@ def register(mcp: FastMCP) -> None:
                 return count
 
             count = await run_arcpy(_export)
-            return tool_result(True, f"Exported {count} features to {out_path}", {
-                "input": in_path,
-                "output": out_path,
-                "where_clause": where,
-                "exported_count": count,
-            })
+            return tool_result(
+                True,
+                f"Exported {count} features to {out_path}",
+                {
+                    "input": in_path,
+                    "output": out_path,
+                    "where_clause": where,
+                    "exported_count": count,
+                },
+            )
 
         except Exception as e:
             return format_error(e)
@@ -494,6 +515,7 @@ def register(mcp: FastMCP) -> None:
 
             def _create():
                 import arcpy
+
                 arcpy.management.CreateFileGDB(folder, name)
                 return f"{folder}/{name}.gdb"
 

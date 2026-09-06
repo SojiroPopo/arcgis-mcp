@@ -9,9 +9,8 @@ import asyncio
 import json
 import os
 import re
-import sys
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 
 # Thread pool for running blocking arcpy calls
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="arcpy_worker")
@@ -25,6 +24,7 @@ def check_arcpy_available() -> bool:
     """Return True if arcpy can be imported."""
     try:
         import arcpy  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -100,7 +100,9 @@ def format_error(e: Exception) -> str:
 
     # arcpy-specific error codes
     if "000732" in msg:
-        return f"Error: Input dataset not found or inaccessible. Check the path and ensure the file exists. Detail: {msg}"
+        return (
+            f"Error: Input dataset not found or inaccessible. Check the path and ensure the file exists. Detail: {msg}"
+        )
     if "000210" in msg:
         return f"Error: Cannot create output — check that the output path is writable and the workspace exists. Detail: {msg}"
     if "000258" in msg:
@@ -126,7 +128,7 @@ def success_json(data: Dict[str, Any]) -> str:
 def tool_result(
     success: bool,
     message: str,
-    data: Optional[Dict[str, Any]] = None,
+    data: Dict[str, Any] | None = None,
 ) -> str:
     """
     Build a standardised tool response string.
@@ -149,6 +151,7 @@ def arcpy_exists(path: str) -> bool:
     """Return True if arcpy.Exists(path) is True (needs arcpy context)."""
     try:
         import arcpy
+
         return arcpy.Exists(path)
     except Exception:
         return os.path.exists(path)
@@ -158,6 +161,7 @@ def get_arcpy_messages() -> List[str]:
     """Return the last arcpy geoprocessing messages as a list of strings."""
     try:
         import arcpy
+
         return [arcpy.GetMessages()]
     except Exception:
         return []
