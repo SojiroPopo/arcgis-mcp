@@ -4,3 +4,59 @@ __pycache__/
 test_output/
 Layout/Sample/*.pdf
 git_output.txt
+
+# ============================================================
+# Geodata & ArcGIS artefak â€” jangan pernah masuk git (audit 2026-09-06)
+# ============================================================
+# File geodatabase (folder) & lock
+*.gdb/
+*.gdb
+*.lock
+*.sr.lock
+# Vektor
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.sbn
+*.sbx
+*.shp.xml
+*.gpkg
+*.gpkg-*
+*.geojson
+*.kml
+*.kmz
+*.las
+*.laz
+# Raster
+*.tif
+*.tiff
+*.tfw
+*.ovr
+*.aux.xml
+*.img
+*.ecw
+*.jp2
+*.asc
+*.nc
+*.vrt
+*.mbtiles
+*.pmtiles
+# ArcGIS Pro project / package
+*.aprx
+*.mxd
+*.mpk
+*.ppkx
+*.lpkx
+*.lyrx
+*.stylx
+*.tbx
+# Data tabular besar / cache
+*.parquet
+*.duckdb
+*.duckdb.wal
+*.sqlite
+*.sqlite3
+# Kecualikan sample kecil yang memang sengaja disimpan (tambahkan di sini jika perlu)
+# !samples/kecil.geojson
